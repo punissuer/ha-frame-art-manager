@@ -5,7 +5,7 @@
 
 ![Project Maintenance][maintenance-shield]
 
-A Home Assistant add-on for managing Samsung Frame TV artwork libraries.
+A Home Assistant add-on for managing Samsung Frame TV artwork libraries. - FORKED FROM BILLYW
 
 ## About
 
@@ -28,7 +28,7 @@ Frame Art Manager provides a beautiful web interface for organizing and managing
 
 1. Navigate to **Supervisor** → **Add-on Store** in Home Assistant
 2. Click the **⋮** menu → **Repositories**
-3. Add this repository URL: `https://github.com/billyfw/ha-frame-art-manager`
+3. Add this repository URL: `https://github.com/punissuer/ha-frame-art-manager`
 4. Find **Frame Art Manager** in the list and click **Install**
 5. Configure and start the add-on
 
