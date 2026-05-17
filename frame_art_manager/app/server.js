@@ -67,6 +67,12 @@ app.use('/api/sync', syncRouter);
 app.use('/api/ha', haRouter);
 app.use('/api/analytics', analyticsRouter);
 
+// Config endpoint — lets the frontend know which features are enabled
+const SYNC_ENABLED = process.env.SYNC_ENABLED !== 'false';
+app.get('/api/config', (req, res) => {
+  res.json({ syncEnabled: SYNC_ENABLED });
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -190,7 +196,7 @@ async function verifyGitConfiguration() {
 app.listen(PORT, async () => {
   console.log(`Frame Art Manager running on port ${PORT}`);
   console.log(`Frame art path: ${FRAME_ART_PATH}`);
-  await verifyGitConfiguration();
+  if (SYNC_ENABLED) await verifyGitConfiguration();
   await initializeDirectories();
   await backfillSourceHashes();
   console.log('\n✨ Server ready!\n');

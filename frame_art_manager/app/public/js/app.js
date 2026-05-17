@@ -4761,7 +4761,7 @@ function formatFileSize(bytes) {
 }
 
 async function uploadBatchImages(files) {
-  const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB in bytes
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB in bytes
   const UPLOAD_TIMEOUT_MS = 120000; // 2 minute timeout per file
   let successCount = 0;
   let errorCount = 0;
