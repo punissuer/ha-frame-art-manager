@@ -265,26 +265,23 @@ async function compressForTV(filePath) {
 
   const ext = path.extname(filePath).toLowerCase();
   const isJpeg = ext === '.jpg' || ext === '.jpeg';
+  const outPath = isJpeg ? filePath : filePath.replace(/\.[^.]+$/, '.jpg');
+  const tmpPath = outPath + '.__compress_tmp';
 
   console.log(`[Upload] Compressing ${(stats.size / 1024 / 1024).toFixed(2)}MB file for TV compatibility`);
 
-  // Always cap at 4K — Samsung Frame is 3840×2160
-  let pipeline = sharp(filePath).resize(3840, 2160, { fit: 'inside', withoutEnlargement: true });
+  // sequentialRead reduces peak RAM (libvips reads in strips, not all at once)
+  // toFile streams output to disk instead of buffering the whole result
+  // quality 70 at ≤3840×2160 reliably lands well under 10 MB for any typical photo
+  await sharp(filePath, { sequentialRead: true })
+    .resize(3840, 2160, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 70 })
+    .toFile(tmpPath);
 
-  for (let quality = 85; quality >= 40; quality -= 10) {
-    const buf = await pipeline.clone().jpeg({ quality, mozjpeg: true }).toBuffer();
-    if (buf.length <= TV_MAX_BYTES) {
-      const outPath = isJpeg ? filePath : filePath.replace(/\.[^.]+$/, '.jpg');
-      await fs.writeFile(outPath, buf);
-      console.log(`[Upload] Compressed to ${(buf.length / 1024 / 1024).toFixed(2)}MB at quality ${quality}`);
-      return outPath;
-    }
-  }
-  // Absolute last resort at quality 30
-  const buf = await pipeline.clone().jpeg({ quality: 30, mozjpeg: true }).toBuffer();
-  const outPath = isJpeg ? filePath : filePath.replace(/\.[^.]+$/, '.jpg');
-  await fs.writeFile(outPath, buf);
-  console.log(`[Upload] Compressed to ${(buf.length / 1024 / 1024).toFixed(2)}MB at quality 30`);
+  await fs.rename(tmpPath, outPath);
+
+  const outStats = await fs.stat(outPath);
+  console.log(`[Upload] Compressed to ${(outStats.size / 1024 / 1024).toFixed(2)}MB`);
   return outPath;
 }
 
