@@ -7,6 +7,16 @@ const MetadataHelper = require('../metadata_helper');
 
 const LFS_POINTER_SIGNATURE = 'version https://git-lfs.github.com/spec/v1';
 
+const SYNC_ENABLED = process.env.SYNC_ENABLED !== 'false';
+
+// Gate all sync routes when git sync is disabled
+router.use((req, res, next) => {
+  if (!SYNC_ENABLED) {
+    return res.json({ success: false, skipped: true, reason: 'Sync is disabled' });
+  }
+  next();
+});
+
 function isNewFileStatus(file) {
   const indexStatus = file.index || '';
   const workingStatus = file.working_dir || '';
