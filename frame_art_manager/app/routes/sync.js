@@ -7,12 +7,21 @@ const MetadataHelper = require('../metadata_helper');
 
 const LFS_POINTER_SIGNATURE = 'version https://git-lfs.github.com/spec/v1';
 
-const SYNC_ENABLED = process.env.SYNC_ENABLED !== 'false';
+// Detect git availability once at startup rather than relying on an env var
+const { execSync } = require('child_process');
+let GIT_AVAILABLE = false;
+try {
+  execSync('git --version', { stdio: 'ignore' });
+  GIT_AVAILABLE = true;
+} catch {
+  GIT_AVAILABLE = false;
+}
+const SYNC_ENABLED = GIT_AVAILABLE && process.env.SYNC_ENABLED !== 'false';
 
-// Gate all sync routes when git sync is disabled
+// Gate all sync routes — return a clean response instead of crashing
 router.use((req, res, next) => {
   if (!SYNC_ENABLED) {
-    return res.json({ success: false, skipped: true, reason: 'Sync is disabled' });
+    return res.json({ success: false, skipped: true, reason: 'Sync is disabled (git not available)' });
   }
   next();
 });

@@ -68,7 +68,11 @@ app.use('/api/ha', haRouter);
 app.use('/api/analytics', analyticsRouter);
 
 // Config endpoint — lets the frontend know which features are enabled
-const SYNC_ENABLED = process.env.SYNC_ENABLED !== 'false';
+const { execSync: _execSync } = require('child_process');
+let _gitAvailable = false;
+try { _execSync('git --version', { stdio: 'ignore' }); _gitAvailable = true; } catch {}
+const SYNC_ENABLED = _gitAvailable && process.env.SYNC_ENABLED !== 'false';
+
 app.get('/api/config', (req, res) => {
   res.json({ syncEnabled: SYNC_ENABLED });
 });
