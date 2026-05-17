@@ -204,16 +204,16 @@ function isMatteValidForPortrait(matte) {
 function updateMatteOptionsForOrientation(selectId, isPortrait, currentValue = null) {
   const select = document.getElementById(selectId);
   if (!select) return;
-  
+
   const optgroups = Array.from(select.querySelectorAll('optgroup'));
   let newValue = currentValue || select.value;
-  
+
   // Remove any existing separator
   const existingSeparator = select.querySelector('.portrait-separator');
   if (existingSeparator) {
     existingSeparator.remove();
   }
-  
+
   // Map display labels to matte type prefixes
   const typeMap = {
     'modernthin': 'modernthin',
@@ -226,17 +226,17 @@ function updateMatteOptionsForOrientation(selectId, isPortrait, currentValue = n
     'mix': 'mix',
     'squares': 'squares'
   };
-  
+
   // Categorize optgroups
   const enabledGroups = [];
   const disabledGroups = [];
-  
+
   optgroups.forEach(group => {
     const label = group.getAttribute('label') || '';
     const matteType = label.toLowerCase().replace(/\s+/g, '');
     const actualType = typeMap[matteType] || matteType;
     const isLandscapeOnly = LANDSCAPE_ONLY_MATTE_TYPES.includes(actualType);
-    
+
     if (isPortrait && isLandscapeOnly) {
       group.disabled = true;
       group.classList.add('matte-disabled');
@@ -247,20 +247,20 @@ function updateMatteOptionsForOrientation(selectId, isPortrait, currentValue = n
       enabledGroups.push(group);
     }
   });
-  
+
   // Reorder: enabled groups first, then separator (if portrait), then disabled groups
   // Get the 'none' option to keep it at the top
   const noneOption = select.querySelector('option[value="none"]');
-  
+
   // Clear and rebuild select (keeping 'none' at top)
   select.innerHTML = '';
   if (noneOption) {
     select.appendChild(noneOption);
   }
-  
+
   // Add enabled groups
   enabledGroups.forEach(group => select.appendChild(group));
-  
+
   // Add separator and disabled groups if portrait
   if (isPortrait && disabledGroups.length > 0) {
     const separator = document.createElement('option');
@@ -268,13 +268,13 @@ function updateMatteOptionsForOrientation(selectId, isPortrait, currentValue = n
     separator.className = 'portrait-separator';
     separator.textContent = '── Landscape only ──';
     select.appendChild(separator);
-    
+
     disabledGroups.forEach(group => select.appendChild(group));
   } else {
     // For landscape, just add remaining groups in original order
     disabledGroups.forEach(group => select.appendChild(group));
   }
-  
+
   // If current value is invalid for portrait, reset to 'none'
   if (isPortrait && !isMatteValidForPortrait(newValue)) {
     select.value = 'none';
@@ -292,19 +292,19 @@ function detectImageOrientation(file) {
   return new Promise((resolve) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
-    
+
     img.onload = () => {
       const isPortrait = img.naturalHeight > img.naturalWidth;
       URL.revokeObjectURL(url);
       resolve(isPortrait);
     };
-    
+
     img.onerror = () => {
       URL.revokeObjectURL(url);
       // Default to landscape on error (shows all mattes)
       resolve(false);
     };
-    
+
     img.src = url;
   });
 }
@@ -320,6 +320,7 @@ let similarDistances = {}; // Map of "fileA|fileB" -> distance
 let similarBreakpoints = []; // Breakpoints for slider ticks
 let preSimilarSortState = null; // Saved sort state before entering similar filter
 let similarThreshold = 38; // Default threshold for similar images (adjustable via slider)
+let syncEnabled = null
 
 // Non 16:9 filter - shows images that are not 16:9 aspect ratio
 let non169FilterActive = false;
@@ -364,7 +365,7 @@ async function fetchLastDisplayedTimes() {
   if (lastDisplayedTimes !== null) {
     return lastDisplayedTimes;
   }
-  
+
   try {
     const response = await fetch(`${API_BASE}/analytics/last-displayed`);
     if (!response.ok) throw new Error('Failed to fetch last displayed times');
@@ -392,14 +393,14 @@ function getRecentlyDisplayedFilenames() {
  */
 function formatRecentTimeAgo(time) {
   if (time === 'now') return 'Now';
-  
+
   const timestamp = typeof time === 'number' ? time : new Date(time).getTime();
   const now = Date.now();
   const diffMs = now - timestamp;
   const diffMinutes = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMinutes / 60);
   const diffDays = Math.floor(diffHours / 24);
-  
+
   if (diffMinutes < 1) return '1m ago';
   if (diffMinutes < 60) return `${diffMinutes}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
@@ -413,25 +414,25 @@ function formatRecentTimeAgo(time) {
  */
 function formatTimeUntilShuffle(isoDateString) {
   if (!isoDateString) return null;
-  
+
   const nextTime = new Date(isoDateString);
   if (isNaN(nextTime.getTime())) return null; // Invalid date
-  
+
   const now = Date.now();
   const diffMs = nextTime.getTime() - now;
-  
+
   // If time has already passed, don't show
   if (diffMs <= 0) return null;
-  
+
   const diffMinutes = Math.round(diffMs / (1000 * 60));
-  
+
   if (diffMinutes < 60) {
     return `${diffMinutes}m left`;
   }
-  
+
   const diffHours = Math.floor(diffMinutes / 60);
   const remainingMins = diffMinutes % 60;
-  
+
   if (remainingMins > 0) {
     return `${diffHours}h ${remainingMins}m left`;
   }
@@ -449,7 +450,7 @@ function startTVStatusPolling() {
   if (tvStatusPollInterval) {
     clearInterval(tvStatusPollInterval);
   }
-  
+
   // Poll every 10 seconds
   tvStatusPollInterval = setInterval(() => {
     // Only poll if tab is visible to save resources
@@ -457,7 +458,7 @@ function startTVStatusPolling() {
       loadTVs();
     }
   }, 10000);
-  
+
   // Also refresh when tab becomes visible again
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
@@ -478,18 +479,18 @@ function startShuffleCountdownTimer() {
   if (shuffleCountdownInterval) {
     clearInterval(shuffleCountdownInterval);
   }
-  
+
   // Update countdown every 30 seconds (we only show minutes, not seconds)
   shuffleCountdownInterval = setInterval(() => {
     // Only update if tab is visible
     if (document.visibilityState !== 'visible') return;
-    
+
     // Update desktop pill countdown times
     document.querySelectorAll('.tv-status-dot').forEach(dot => {
       const tvId = dot.dataset.tvId;
       const tv = allTVs.find(t => t.device_id === tvId);
       const timeEl = dot.querySelector('.pill-shuffle-time');
-      
+
       if (tv?.next_shuffle_time) {
         const newTime = formatTimeUntilShuffle(tv.next_shuffle_time);
         if (newTime) {
@@ -513,13 +514,13 @@ function startShuffleCountdownTimer() {
         timeEl.remove();
       }
     });
-    
+
     // Update mobile bar countdown times
     document.querySelectorAll('.tv-status-bar').forEach(bar => {
       const tvId = bar.dataset.tvId;
       const tv = allTVs.find(t => t.device_id === tvId);
       const timeEl = bar.querySelector('.bar-shuffle-time');
-      
+
       if (tv?.next_shuffle_time) {
         const newTime = formatTimeUntilShuffle(tv.next_shuffle_time);
         if (newTime) {
@@ -558,13 +559,13 @@ function clearRecentlyDisplayedFilter() {
  */
 function getRecentlyDisplayedInfoForFile(filename) {
   if (!recentlyDisplayedFilterActive) return [];
-  
+
   const entries = recentlyDisplayedData[filename] || [];
   if (entries.length === 0) return [];
-  
+
   // Max TV name length for truncation
   const MAX_TV_NAME_LENGTH = 12;
-  
+
   return entries.map(entry => {
     let tvName = entry.tv_name || 'Unknown TV';
     // Truncate long TV names
@@ -582,7 +583,7 @@ function getRecentlyDisplayedInfoForFile(filename) {
  */
 function getTVStatusData() {
   if (!allTVs || allTVs.length === 0) return [];
-  
+
   // Build a map of tv_id -> { filename, isOn } from recentlyDisplayedData
   const tvCurrentImage = {};
   for (const [filename, entries] of Object.entries(recentlyDisplayedData)) {
@@ -597,7 +598,7 @@ function getTVStatusData() {
       }
     }
   }
-  
+
   return allTVs.map(tv => {
     const current = tvCurrentImage[tv.device_id];
     return {
@@ -618,15 +619,15 @@ function getTVStatusData() {
 function renderTVStatusDots() {
   const desktopContainer = document.getElementById('tv-status-container');
   const mobileContainer = document.getElementById('tv-status-container-mobile');
-  
+
   const tvStatus = getTVStatusData();
-  
+
   if (tvStatus.length === 0) {
     if (desktopContainer) desktopContainer.innerHTML = '';
     if (mobileContainer) mobileContainer.innerHTML = '';
     return;
   }
-  
+
   // Desktop: dots with hover pills
   const dotsHtml = tvStatus.map(tv => {
     const displayName = tv.currentImage ? getDisplayName(tv.currentImage) : 'None';
@@ -635,7 +636,7 @@ function renderTVStatusDots() {
     const statusClass = tv.hasOverride ? 'override' : (tv.isOn ? 'on' : 'off');
     // Format time until next shuffle (null if none scheduled or passed)
     const shuffleTimeLeft = formatTimeUntilShuffle(tv.nextShuffleTime);
-    
+
     // Only show image/time info when TV is on
     let imageTimeHtml = '';
     if (tv.isOn) {
@@ -644,14 +645,14 @@ function renderTVStatusDots() {
       const timePart = shuffleTimeLeft ? ' <span class="pill-shuffle-time">' + escapeHtml(shuffleTimeLeft) + '</span>' : '';
       imageTimeHtml = ' (' + imagePart + timePart + ')';
     }
-    
+
     const tvNamePart = '<span class="pill-tv-name">' + escapeHtml(tv.tvName) + '</span>';
     const tagsetPart = '<span class="pill-tagset">' + escapeHtml(tv.activeTagset) + '</span>';
     const pillContent = tvNamePart + ': ' + tagsetPart + imageTimeHtml;
-    
+
     return '<div class="tv-status-dot ' + statusClass + '" data-tv-id="' + tv.tvId + '" data-filename="' + (tv.currentImage || '') + '" title="' + tv.tvName + '"><div class="tv-status-pill">' + pillContent + '</div></div>';
   }).join('');
-  
+
   // Mobile: bars with text always visible (same format as desktop pill)
   const barsHtml = tvStatus.map(tv => {
     const displayName = tv.currentImage ? getDisplayName(tv.currentImage) : 'None';
@@ -659,7 +660,7 @@ function renderTVStatusDots() {
     const statusClass = tv.hasOverride ? 'override' : (tv.isOn ? 'on' : 'off');
     // Format time until next shuffle (null if none scheduled or passed)
     const shuffleTimeLeft = formatTimeUntilShuffle(tv.nextShuffleTime);
-    
+
     // Only show image/time info when TV is on
     let imageTimeHtml = '';
     if (tv.isOn) {
@@ -668,17 +669,17 @@ function renderTVStatusDots() {
       const timePart = shuffleTimeLeft ? ' <span class="bar-shuffle-time">' + escapeHtml(shuffleTimeLeft) + '</span>' : '';
       imageTimeHtml = ' (' + imagePart + timePart + ')';
     }
-    
+
     const tvNamePart = '<span class="bar-tv-name">' + escapeHtml(tv.tvName) + '</span>';
     const tagsetPart = '<span class="bar-tagset">' + escapeHtml(tv.activeTagset) + '</span>';
     const barContent = tvNamePart + ': ' + tagsetPart + imageTimeHtml;
-    
+
     return '<div class="tv-status-bar ' + statusClass + '" data-tv-id="' + tv.tvId + '" data-filename="' + (tv.currentImage || '') + '">' + barContent + '</div>';
   }).join('');
-  
+
   if (desktopContainer) desktopContainer.innerHTML = dotsHtml;
   if (mobileContainer) mobileContainer.innerHTML = barsHtml;
-  
+
   // Add click listeners for desktop dots
   document.querySelectorAll('.tv-status-dot').forEach(dot => {
     dot.addEventListener('click', (e) => {
@@ -690,7 +691,7 @@ function renderTVStatusDots() {
       }
     });
   });
-  
+
   // Add click listeners for mobile bars
   document.querySelectorAll('.tv-status-bar').forEach(bar => {
     bar.addEventListener('click', (e) => {
@@ -788,7 +789,7 @@ function showDuplicateWarning(duplicates) {
   }
 
   // Build thumbnails for each duplicate
-  const thumbsHtml = duplicates.map(filename => 
+  const thumbsHtml = duplicates.map(filename =>
     `<div class="dupe-thumb-item">
       <img src="thumbs/thumb_${encodeURIComponent(filename)}" alt="${escapeHtml(filename)}" onerror="this.style.display='none'">
       <span class="dupe-thumb-name">${escapeHtml(filename)}</span>
@@ -839,6 +840,20 @@ async function fetchSimilarBreakpoints() {
   }
 }
 
+async function fetchConfig() {
+  try {
+    const response = await fetch(`${API_BASE}/config`);
+    if (!response.ok) throw new Error('Failed to fetch config.');
+    const data = await response.json();
+    syncEnabled = data.syncEnabled !== undefined ? data.syncEnabled : null;
+    return syncEnabled;
+  } catch (error) {
+    console.error('Error fetching config:', error);
+    syncEnabled = null;
+    return null;
+  }
+}
+
 /**
  * Get set of filenames that are similar images
  */
@@ -861,10 +876,10 @@ function getSimilarBreakpointCounts() {
   if (!similarBreakpoints || similarBreakpoints.length === 0) {
     return { dupeCount: 0, simCount: 0 };
   }
-  
+
   let dupeCount = 0;
   let totalAt38 = 0;
-  
+
   // Find the highest totalImages at or below each threshold
   for (const bp of similarBreakpoints) {
     if (bp.threshold <= 10) {
@@ -874,7 +889,7 @@ function getSimilarBreakpointCounts() {
       totalAt38 = bp.totalImages || 0;
     }
   }
-  
+
   // simCount is images that are similar but not duplicates
   const simCount = totalAt38 - dupeCount;
   return { dupeCount, simCount: Math.max(0, simCount) };
@@ -943,7 +958,7 @@ function handleRoute() {
   const hash = window.location.hash.slice(1) || '/'; // Remove '#' and default to '/'
   const [path, queryString] = hash.split('?');
   const params = new URLSearchParams(queryString || '');
-  
+
   if (path.startsWith('/advanced')) {
     const parts = path.split('/');
     const requestedTab = parts[2] || ADVANCED_TAB_DEFAULT; // /advanced/sync -> 'sync'
@@ -1070,12 +1085,12 @@ function openTagDropdownPortal() {
   // Remove any existing shield first
   const existingShield = document.getElementById('dropdown-click-shield');
   if (existingShield) existingShield.remove();
-  
+
   // Create fresh click shield to catch outside clicks without triggering elements underneath
   const shield = document.createElement('div');
   shield.id = 'dropdown-click-shield';
   shield.className = 'dropdown-click-shield';
-  
+
   // Absorb all touch events to prevent them reaching cards underneath
   shield.addEventListener('touchstart', (e) => {
     e.preventDefault();
@@ -1138,13 +1153,13 @@ function openTagDropdownPortal() {
 
 function closeTagDropdownPortal() {
   const { btn, dropdown } = getTagFilterElements();
-  
+
   // Remove click shield and re-enable hover effects
   const shield = document.getElementById('dropdown-click-shield');
   if (shield) shield.remove();
   // Delay removing dropdown-open class to ensure hover suppression stays active through touch end
   setTimeout(() => document.body.classList.remove('dropdown-open'), 300);
-  
+
   if (!dropdown || !tagDropdownState.isOpen) {
     // Also ensure inline display is off even if we think it's closed
     if (dropdown) {
@@ -1253,11 +1268,11 @@ function getDisplayName(filename) {
 // Returns array of {filename, distance} objects with actual pairwise distances
 function getSimilarImagesForFile(filename) {
   if (!similarFilterActive || similarGroups.length === 0) return [];
-  
+
   // Find the group containing this filename
   const group = similarGroups.find(g => g.includes(filename));
   if (!group) return [];
-  
+
   // Return other images in the group with their pairwise distances to this file
   return group
     .filter(other => other !== filename)
@@ -1273,34 +1288,41 @@ function getSimilarImagesForFile(filename) {
 // Helper function to format date
 function formatDate(dateString) {
   if (!dateString) return '';
-  
+
   const date = new Date(dateString);
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const month = months[date.getMonth()];
   const day = date.getDate();
   const year = date.getFullYear();
-  
+
   return `${month} ${day}, ${year}`;
 }
 
 // Short date format for mobile: m/d/yy
 function formatDateShort(dateString) {
   if (!dateString) return '';
-  
+
   const date = new Date(dateString);
   const month = date.getMonth() + 1;
   const day = date.getDate();
   const year = String(date.getFullYear()).slice(-2);
-  
+
   return `${month}/${day}/${year}`;
 }
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', async () => {
+  await fetchConfig();
+  if (syncEnabled === false) {
+    const syncBtn = document.getElementById('sync-btn');
+    if (syncBtn) syncBtn.style.display = 'none';
+    const syncTabBtn = document.querySelector('.advanced-tab-btn[data-tab="sync"]');
+    if (syncTabBtn) syncTabBtn.style.display = 'none';
+  }
   initTabs();
   loadLibraryPath();
   initCloudSyncButton(); // Initialize cloud sync button in toolbar - BEFORE checking sync
-  
+
   const sortOrderSelect = document.getElementById('sort-order');
   if (sortOrderSelect) {
     sortOrderSelect.value = initialSortOrderPreference;
@@ -1312,7 +1334,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Set up hash-based routing
   window.addEventListener('hashchange', handleRoute);
   window.addEventListener('load', handleRoute);
-  
+
   // Load UI first so user can start working immediately
   loadGallery();
   loadTags();
@@ -1328,27 +1350,27 @@ document.addEventListener('DOMContentLoaded', async () => {
   initTvModal();
   initGalleryInfiniteScroll(); // Initialize infinite scroll for gallery
   initTagsetModalListeners(); // Initialize tagset modal event listeners
-  
+
   // Pre-fetch similar groups for filter counts
   fetchSimilarGroups();
   fetchSimilarBreakpoints();
-  
+
   // Pre-fetch recently displayed for filter counts
   fetchRecentlyDisplayed();
-  
+
   // Handle initial route
   handleRoute();
-  
+
   // Check for sync updates in the background (after UI is loaded)
-  checkSyncOnLoad();
-  
+  if (syncEnabled !== false) checkSyncOnLoad();
+
   // Load analytics data in background for gallery "last display" info
   loadAnalyticsDataForGallery();
-  
+
   // Start polling for TV status updates (every 10 seconds)
   // This keeps the TV bubbles current with screen state, shuffle times, etc.
   startTVStatusPolling();
-  
+
   // Start countdown timer for shuffle time display (every second)
   startShuffleCountdownTimer();
 });
@@ -1360,17 +1382,17 @@ async function checkSyncOnLoad() {
     console.log('Sync already in progress, skipping load check...');
     return;
   }
-  
+
   try {
     isSyncInProgress = true; // Mark as in progress
-    
+
     // Show checking state
     updateSyncButtonState('syncing', 'Syncing...', null, null, null);
-    
+
     console.log('Checking for cloud updates...');
     const response = await fetch(`${API_BASE}/sync/check`);
     const data = await response.json();
-    
+
     if (data.success && (data.pulledChanges || data.autoResolvedConflict)) {
       console.log(`✅ ${data.message}`);
       if (data.autoResolvedConflict) {
@@ -1415,27 +1437,27 @@ async function checkSyncOnLoad() {
 async function autoPushLocalChanges() {
   const callId = Math.random().toString(36).substring(7);
   console.log(`\n🟦 [FE-${callId}] autoPushLocalChanges() called`);
-  
+
   // Check if sync is already in progress
   if (isSyncInProgress) {
     console.log(`⏸️  [FE-${callId}] Sync already in progress (frontend lock), skipping...`);
     return;
   }
-  
+
   try {
     isSyncInProgress = true; // Mark as in progress
     console.log(`🔒 [FE-${callId}] Frontend lock acquired`);
     console.log(`📡 [FE-${callId}] Calling /api/sync/full...`);
-    
+
     // Use atomic full sync endpoint (same as manual sync)
     const syncResponse = await fetch(`${API_BASE}/sync/full`, {
       method: 'POST'
     });
-    
+
     console.log(`📨 [FE-${callId}] Response status: ${syncResponse.status}`);
     const syncData = await syncResponse.json();
     console.log(`📦 [FE-${callId}] Response data:`, syncData);
-    
+
     if (syncData.success) {
       console.log(`✅ [FE-${callId}] Auto-sync successful:`, syncData.message);
       if (syncData.autoResolvedConflict) {
@@ -1480,23 +1502,23 @@ async function updateSyncStatus() {
     console.log('⏸️  Skipping status update - sync in progress');
     return;
   }
-  
+
   console.log('🔍 updateSyncStatus() called');
-  
+
   try {
     const response = await fetch(`${API_BASE}/sync/status`);
     const data = await response.json();
-    
+
     console.log('📊 Sync status response:', data);
-    
+
     if (!data.success) {
       console.error('❌ Sync status check failed');
       updateSyncButtonState('error', 'Error', null, null, null);
       return;
     }
-    
+
     const status = data.status;
-    
+
     // Determine state based on status
     if (status.hasChanges) {
       console.log('⚠️  Has changes - setting unsynced state');
@@ -1505,7 +1527,7 @@ async function updateSyncStatus() {
       console.log('✅ No changes - setting synced state');
       updateSyncButtonState('synced', 'Synced', null, null, null);
     }
-    
+
   } catch (error) {
     console.error('Error updating sync status:', error);
     updateSyncButtonState('error', 'Error', null, null, error.message);
@@ -1515,23 +1537,23 @@ async function updateSyncStatus() {
 // Update sync button visual state
 function updateSyncButtonState(state, text, syncStatus, _unused, errorMessage) {
   console.log(`🎨 updateSyncButtonState() called with state: ${state}, text: ${text}`);
-  
+
   const syncBtn = document.getElementById('sync-btn');
   const syncIcon = document.getElementById('sync-icon');
   const syncText = document.getElementById('sync-text');
   const syncBadge = document.getElementById('sync-badge');
-  
+
   if (!syncBtn) {
     console.error('❌ Sync button element not found!');
     return;
   }
-  
+
   // Remove all state classes
   syncBtn.classList.remove('synced', 'syncing', 'unsynced', 'error');
-  
+
   // Add current state class
   syncBtn.classList.add(state);
-  
+
   // Set icon based on state
   const icons = {
     synced: '✅',
@@ -1540,17 +1562,17 @@ function updateSyncButtonState(state, text, syncStatus, _unused, errorMessage) {
     error: '❌'
   };
   syncIcon.textContent = icons[state] || '☁️';
-  
+
   // Set text label
   if (syncText) {
     syncText.textContent = text;
   }
-  
+
   // Update badge with up/down triangle format
   if (state === 'unsynced' && syncStatus) {
     const uploadCount = syncStatus.upload.count;
     const downloadCount = syncStatus.download.count;
-    
+
     let badgeText = '';
     if (uploadCount > 0 && downloadCount > 0) {
       badgeText = `${uploadCount}▲/${downloadCount}▼`;
@@ -1559,7 +1581,7 @@ function updateSyncButtonState(state, text, syncStatus, _unused, errorMessage) {
     } else if (downloadCount > 0) {
       badgeText = `${downloadCount}▼`;
     }
-    
+
     if (badgeText) {
       syncBadge.textContent = badgeText;
       syncBadge.style.display = 'block';
@@ -1569,18 +1591,18 @@ function updateSyncButtonState(state, text, syncStatus, _unused, errorMessage) {
   } else {
     syncBadge.style.display = 'none';
   }
-  
+
   // Update tooltip
   let tooltip;
-  
+
   if (state === 'synced') {
-    tooltip = libraryPath 
+    tooltip = libraryPath
       ? `Frame Art Gallery is synced to cloud Git LFS repo at ${libraryPath}`
       : 'All changes synced to cloud';
   } else if (state === 'unsynced' && syncStatus) {
     // Build multi-line tooltip
     const lines = [];
-    
+
     // Upload changes
     if (syncStatus.upload.newImages > 0) {
       const plural = syncStatus.upload.newImages !== 1 ? 's' : '';
@@ -1597,7 +1619,7 @@ function updateSyncButtonState(state, text, syncStatus, _unused, errorMessage) {
       const text = count === 1 ? 'image deletion' : 'image deletions';
       lines.push(`${count} ${text} to upload`);
     }
-    
+
     // Download changes
     if (syncStatus.download.newImages > 0) {
       const plural = syncStatus.download.newImages !== 1 ? 's' : '';
@@ -1614,7 +1636,7 @@ function updateSyncButtonState(state, text, syncStatus, _unused, errorMessage) {
       const text = count === 1 ? 'image deletion' : 'image deletions';
       lines.push(`${count} ${text} to download`);
     }
-    
+
     // Add blank line before "Click to sync" if there are any changes
     if (lines.length > 0) {
       lines.push('');
@@ -1632,9 +1654,9 @@ function updateSyncButtonState(state, text, syncStatus, _unused, errorMessage) {
     };
     tooltip = tooltips[state] || 'Sync with cloud';
   }
-  
+
   syncBtn.title = tooltip;
-  
+
   // Disable button when syncing
   syncBtn.disabled = (state === 'syncing');
 }
@@ -1646,7 +1668,7 @@ function initCloudSyncButton() {
     console.warn('Cloud sync button not found - skipping initialization');
     return;
   }
-  
+
   syncBtn.addEventListener('click', async () => {
     await manualSync();
   });
@@ -1732,34 +1754,35 @@ async function refreshGalleryAfterSync(syncData) {
 
 // Manual sync (commit, pull, then push)
 async function manualSync() {
+  if (syncEnabled === false) return;
   const callId = Math.random().toString(36).substring(7);
   console.log(`\n🟩 [FE-${callId}] manualSync() called (user clicked sync button)`);
-  
+
   // Check if sync is already in progress
   if (isSyncInProgress) {
     console.log(`⏸️  [FE-${callId}] Sync already in progress (frontend lock), skipping...`);
     return;
   }
-  
+
   try {
     // Mark sync as in progress
     isSyncInProgress = true;
     console.log(`🔒 [FE-${callId}] Frontend lock acquired`);
-    
+
     // Set syncing state
     updateSyncButtonState('syncing', 'Syncing...', null, null, null);
-    
+
     console.log(`📡 [FE-${callId}] Calling /api/sync/full...`);
-    
+
     // Use the atomic full sync endpoint (commit → pull → push in one transaction)
     const syncResponse = await fetch(`${API_BASE}/sync/full`, {
       method: 'POST'
     });
-    
+
     console.log(`📨 [FE-${callId}] Response status: ${syncResponse.status}`);
     const syncData = await syncResponse.json();
     console.log(`📦 [FE-${callId}] Response data:`, syncData);
-    
+
     // Check both HTTP status and success flag
     if (!syncResponse.ok || !syncData.success) {
       // Check if another sync is in progress (backend lock)
@@ -1769,7 +1792,7 @@ async function manualSync() {
         isSyncInProgress = false; // Clear frontend flag
         return;
       }
-      
+
       const validationDetails = formatValidationErrors(syncData.validationErrors);
 
       if (validationDetails) {
@@ -1792,22 +1815,22 @@ async function manualSync() {
       isSyncInProgress = false; // Clear flag
       return;
     }
-    
+
     console.log(`✅ [FE-${callId}] Full sync complete:`, syncData.message);
 
     if (syncData.autoResolvedConflict) {
       alertLostLocalChanges(syncData.lostChangesSummary);
     }
-    
+
     // Reload gallery to show any new images from pull
     await refreshGalleryAfterSync(syncData);
     await loadTags();
     await loadSyncLogs();
-    
+
     // Release lock before updating status so the status update isn't skipped
     console.log(`🔓 [FE-${callId}] Frontend lock released\n`);
     isSyncInProgress = false; // Clear flag on success
-    
+
     // Update sync status (now that lock is released)
     try {
       await updateSyncStatus();
@@ -1816,7 +1839,7 @@ async function manualSync() {
       // Fallback: ensure button is at least set to synced state
       updateSyncButtonState('synced', 'Synced', null, null, null);
     }
-    
+
   } catch (error) {
     console.error(`💥 [FE-${callId}] Error during manual sync:`, error);
     const errorMsg = error.message || 'Network error or server unavailable';
@@ -1834,11 +1857,11 @@ async function loadLibraryPath() {
     const response = await fetch(`${API_BASE}/health`);
     const data = await response.json();
     const pathValue = data.frameArtPath || 'Unknown';
-    
+
     // Store globally
     libraryPath = pathValue;
     appEnvironment = data.env || 'development';
-    
+
     // Update advanced tab path display
     const advancedPathElement = document.getElementById('advanced-path-value');
     if (advancedPathElement) {
@@ -1955,7 +1978,7 @@ function initSettingsNavigation() {
 
   // Initialize advanced sub-tabs
   initAdvancedSubTabs();
-  
+
   // Initialize analytics mobile tabs
   initAnalyticsMobileTabs();
 }
@@ -1976,16 +1999,16 @@ function initAdvancedSubTabs() {
 
 function initAnalyticsMobileTabs() {
   const tabButtons = document.querySelectorAll('.analytics-mobile-tab');
-  
+
   tabButtons.forEach((button) => {
     button.setAttribute('type', 'button');
     button.addEventListener('click', () => {
       const targetColumn = button.dataset.column;
-      
+
       // Update tab buttons
       tabButtons.forEach(btn => btn.classList.remove('active'));
       button.classList.add('active');
-      
+
       // Update visibility via data attribute on page content container
       const pageContent = document.querySelector('.analytics-page-content');
       if (pageContent) {
@@ -2012,7 +2035,7 @@ async function loadGallery() {
 
     // Also load tags for filter dropdown
     await loadTagsForFilter();
-    
+
     // Prefetch last displayed times if needed for 'displayed' sort
     const sortOrderSelect = document.getElementById('sort-order');
     const currentSortOrder = sortOrderSelect ? sortOrderSelect.value : initialSortOrderPreference;
@@ -2038,7 +2061,7 @@ async function loadGallery() {
 function updateGallerySelectionVisual() {
   const grid = document.getElementById('image-grid');
   if (!grid) return;
-  
+
   const allCards = grid.querySelectorAll('.image-card');
   allCards.forEach(card => {
     const filename = card.dataset.filename;
@@ -2048,22 +2071,22 @@ function updateGallerySelectionVisual() {
       card.classList.remove('selected');
     }
   });
-  
+
   // Update the bulk actions bar
   updateBulkActionsBar(currentFilteredImages.length);
 }
 
 function handleImageClick(filename, index, event) {
   event.stopPropagation();
-  
+
   const grid = document.getElementById('image-grid');
   const allCards = Array.from(grid.querySelectorAll('.image-card'));
-  
+
   if (event.shiftKey && lastClickedIndex !== null) {
     // Range selection
     const start = Math.min(lastClickedIndex, index);
     const end = Math.max(lastClickedIndex, index);
-    
+
     for (let i = start; i <= end; i++) {
       const card = allCards[i];
       if (card) {
@@ -2082,7 +2105,7 @@ function handleImageClick(filename, index, event) {
     selectedImages.clear();
     selectedImages.add(filename);
   }
-  
+
   lastClickedIndex = index;
   // Use lightweight visual update instead of full re-render to prevent scroll flickering
   updateGallerySelectionVisual();
@@ -2093,17 +2116,17 @@ function updateBulkActionsBar(totalSelectableCount) {
   const selectedCount = document.getElementById('selected-count');
   const selectedCountMobile = document.getElementById('selected-count-mobile');
   const selectAllBtn = document.getElementById('select-all-btn');
-  
+
   // Update Select All button with count (use provided count or fallback to total images)
   const count = totalSelectableCount ?? Object.keys(allImages).length;
-  
+
   if (selectAllBtn) {
     const desktopText = selectAllBtn.querySelector('.desktop-text');
     const mobileText = selectAllBtn.querySelector('.mobile-text');
     if (desktopText) desktopText.textContent = `Select All (${count})`;
     if (mobileText) mobileText.innerHTML = `Select<br>All (${count})`;
   }
-  
+
   if (selectedImages.size > 0) {
     bulkActions.classList.add('visible');
     selectedCount.textContent = selectedImages.size;
@@ -2133,14 +2156,14 @@ function selectAllImages() {
 
   // Apply same filters as renderGallery
   if (searchTerm) {
-    filteredImages = filteredImages.filter(([filename]) => 
+    filteredImages = filteredImages.filter(([filename]) =>
       filename.toLowerCase().includes(searchTerm)
     );
   }
 
   // Filter by included tags
   if (includedTags.length > 0) {
-    filteredImages = filteredImages.filter(([_, data]) => 
+    filteredImages = filteredImages.filter(([_, data]) =>
       data.tags && includedTags.some(tag => data.tags.includes(tag))
     );
   }
@@ -2158,22 +2181,22 @@ function selectAllImages() {
   if (noneCheckbox && noneCheckbox.checked) {
     filteredImages = filteredImages.filter(([_, data]) => {
       const imageTagSet = new Set(data.tags || []);
-      
+
       for (const tv of allTVs) {
         const tvIncludeTags = tv.tags || [];
         const tvExcludeTags = tv.exclude_tags || [];
-        
+
         if (tvIncludeTags.length > 0 && !tvIncludeTags.some(tag => imageTagSet.has(tag))) {
           continue;
         }
-        
+
         if (tvExcludeTags.length > 0 && tvExcludeTags.some(tag => imageTagSet.has(tag))) {
           continue;
         }
-        
+
         return false;
       }
-      
+
       return true;
     });
   }
@@ -2192,11 +2215,11 @@ function openBulkTagModal() {
   const countSpan = document.getElementById('bulk-count');
   console.log('modal:', modal, 'countSpan:', countSpan);
   countSpan.textContent = selectedImages.size;
-  
+
   // Calculate tag frequencies across selected images
   const tagCounts = {};
   const selectedArray = Array.from(selectedImages);
-  
+
   selectedArray.forEach(filename => {
     const imageData = allImages[filename];
     const tags = imageData.tags || [];
@@ -2204,11 +2227,11 @@ function openBulkTagModal() {
       tagCounts[tag] = (tagCounts[tag] || 0) + 1;
     });
   });
-  
+
   // Separate tags into "all" and "some"
   const allTags = [];
   const someTags = [];
-  
+
   Object.entries(tagCounts).forEach(([tag, count]) => {
     if (count === selectedArray.length) {
       allTags.push(tag);
@@ -2216,45 +2239,45 @@ function openBulkTagModal() {
       someTags.push(tag);
     }
   });
-  
+
   // Render the tag badges
   renderBulkTagBadges('bulk-all-tags', allTags, false);
   renderBulkTagBadges('bulk-some-tags', someTags, true);
-  
+
   // Render suggested TV tags
   renderBulkTvTagsHelper(allTags);
-  
+
   modal.classList.add('visible');
   console.log('modal classes after add:', modal.className);
 }
 
 function renderBulkTagBadges(containerId, tags, isPartial) {
   const container = document.getElementById(containerId);
-  
+
   if (tags.length === 0) {
     container.innerHTML = '';
     return;
   }
-  
+
   container.innerHTML = tags.sort().map(tag => {
     // Get TV info for this tag (same as image modal)
     const tvMatches = getTvMatchesForTag(tag);
     let tooltip = '';
     let tvInfoHtml = '';
-    
+
     if (tvMatches.length > 0) {
       const matchStrings = tvMatches
         .sort((a, b) => a.tvName.localeCompare(b.tvName))
         .map(m => m.isExclude ? `${m.tvName} (exclude)` : m.tvName);
       tooltip = matchStrings.join(', ');
-      
+
       const excludeCount = tvMatches.filter(m => m.isExclude).length;
       const allExclude = excludeCount === tvMatches.length;
       const someExclude = excludeCount > 0 && !allExclude;
-      
+
       let tvLabel;
       let colorClass = '';
-      
+
       if (tvMatches.length === 1) {
         tvLabel = tvMatches[0].isExclude ? `ex:${tvMatches[0].tvName}` : tvMatches[0].tvName;
         if (tvMatches[0].isExclude) colorClass = ' tv-info-exclude';
@@ -2266,7 +2289,7 @@ function renderBulkTagBadges(containerId, tags, isPartial) {
       } else {
         tvLabel = `${tvMatches.length} TVs`;
       }
-      
+
       if (!tvInfoHtml) {
         if (tvLabel.length > 12) {
           tvLabel = tvLabel.substring(0, 11) + '…';
@@ -2274,14 +2297,14 @@ function renderBulkTagBadges(containerId, tags, isPartial) {
         tvInfoHtml = `<span class="tag-tv-info${colorClass}">${escapeHtml(tvLabel)}</span>`;
       }
     }
-    
+
     const hasMatchClass = tvMatches.length > 0 ? ' has-tv-match' : '';
-    
+
     // Both tag types are fully clickable - clicking removes the tag
     // For "on all" tags: removes from all selected images
     // For "on some" tags: removes from images that have it
     const clickHandler = `onclick="removeBulkTag('${escapeHtml(tag)}', ${isPartial})"`;
-    
+
     return `
     <div class="tag-item${isPartial ? ' partial' : ''}${hasMatchClass} clickable" ${tooltip ? `title="${escapeHtml(tooltip)}"` : ''} ${clickHandler}>
       <div class="tag-content">
@@ -2425,14 +2448,14 @@ function renderBulkTvTagsHelper(allAppliedTags) {
 // Add a tag to all selected images from bulk helper (uses batch API)
 async function addBulkTagFromHelper(tagName) {
   const selectedArray = Array.from(selectedImages);
-  
+
   try {
     const response = await fetch(`${API_BASE}/images/batch/add-tag`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filenames: selectedArray, tag: tagName })
     });
-    
+
     const result = await response.json();
     if (result.success) {
       // Update local cache - add tag to each image
@@ -2453,10 +2476,10 @@ async function addBulkTagFromHelper(tagName) {
   } catch (error) {
     console.error('Error in batch add tag:', error);
   }
-  
+
   // Refresh the bulk modal to show updated state
   refreshBulkTagModal();
-  
+
   // Update sync status since metadata changed
   await updateSyncStatus();
 }
@@ -2466,7 +2489,7 @@ function refreshBulkTagModal() {
   const selectedArray = Array.from(selectedImages);
   const countSpan = document.getElementById('bulk-count');
   if (countSpan) countSpan.textContent = selectedImages.size;
-  
+
   const tagCounts = {};
   selectedArray.forEach(filename => {
     const imageData = allImages[filename];
@@ -2475,10 +2498,10 @@ function refreshBulkTagModal() {
       tagCounts[tag] = (tagCounts[tag] || 0) + 1;
     });
   });
-  
+
   const allTags = [];
   const someTags = [];
-  
+
   Object.entries(tagCounts).forEach(([tag, count]) => {
     if (count === selectedArray.length) {
       allTags.push(tag);
@@ -2486,7 +2509,7 @@ function refreshBulkTagModal() {
       someTags.push(tag);
     }
   });
-  
+
   renderBulkTagBadges('bulk-all-tags', allTags, false);
   renderBulkTagBadges('bulk-some-tags', someTags, true);
   renderBulkTvTagsHelper(allTags);
@@ -2494,14 +2517,14 @@ function refreshBulkTagModal() {
 
 async function removeBulkTag(tagName, isPartial) {
   const selectedArray = Array.from(selectedImages);
-  
+
   try {
     const response = await fetch(`${API_BASE}/images/batch/remove-tag`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filenames: selectedArray, tag: tagName })
     });
-    
+
     const result = await response.json();
     if (result.success) {
       // Update local cache - remove tag from each image
@@ -2517,11 +2540,11 @@ async function removeBulkTag(tagName, isPartial) {
   } catch (error) {
     console.error('Error in batch remove tag:', error);
   }
-  
+
   // Refresh the modal to show updated tags
   const countSpan = document.getElementById('bulk-count');
   countSpan.textContent = selectedImages.size;
-  
+
   // Recalculate tag frequencies
   const tagCounts = {};
   selectedArray.forEach(filename => {
@@ -2531,10 +2554,10 @@ async function removeBulkTag(tagName, isPartial) {
       tagCounts[tag] = (tagCounts[tag] || 0) + 1;
     });
   });
-  
+
   const allTags = [];
   const someTags = [];
-  
+
   Object.entries(tagCounts).forEach(([tag, count]) => {
     if (count === selectedArray.length) {
       allTags.push(tag);
@@ -2542,25 +2565,25 @@ async function removeBulkTag(tagName, isPartial) {
       someTags.push(tag);
     }
   });
-  
+
   renderBulkTagBadges('bulk-all-tags', allTags, false);
   renderBulkTagBadges('bulk-some-tags', someTags, true);
   renderBulkTvTagsHelper(allTags);
-  
+
   // Update sync status since metadata changed
   await updateSyncStatus();
 }
 
 async function makeTagAll(tagName) {
   const selectedArray = Array.from(selectedImages);
-  
+
   try {
     const response = await fetch(`${API_BASE}/images/batch/add-tag`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filenames: selectedArray, tag: tagName })
     });
-    
+
     const result = await response.json();
     if (result.success) {
       // Update local cache - add tag to each image
@@ -2581,11 +2604,11 @@ async function makeTagAll(tagName) {
   } catch (error) {
     console.error('Error in batch add tag:', error);
   }
-  
+
   // Refresh the modal to show updated tags
   const countSpan = document.getElementById('bulk-count');
   countSpan.textContent = selectedImages.size;
-  
+
   // Recalculate tag frequencies
   const tagCounts = {};
   selectedArray.forEach(filename => {
@@ -2595,10 +2618,10 @@ async function makeTagAll(tagName) {
       tagCounts[tag] = (tagCounts[tag] || 0) + 1;
     });
   });
-  
+
   const allTags = [];
   const someTags = [];
-  
+
   Object.entries(tagCounts).forEach(([tag, count]) => {
     if (count === selectedArray.length) {
       allTags.push(tag);
@@ -2606,11 +2629,11 @@ async function makeTagAll(tagName) {
       someTags.push(tag);
     }
   });
-  
+
   renderBulkTagBadges('bulk-all-tags', allTags, false);
   renderBulkTagBadges('bulk-some-tags', someTags, true);
   renderBulkTvTagsHelper(allTags);
-  
+
   // Update sync status since metadata changed
   await updateSyncStatus();
 }
@@ -2619,10 +2642,10 @@ function closeBulkTagModal() {
   const modal = document.getElementById('bulk-tag-modal');
   modal.classList.remove('visible');
   document.getElementById('bulk-tags-input').value = '';
-  
+
   // Update tag displays on visible image cards to reflect changes
   updateGalleryCardTags();
-  
+
   // Deselect all images
   selectedImages.clear();
   lastClickedIndex = null;
@@ -2636,13 +2659,13 @@ function closeBulkTagModal() {
 function updateGalleryCardTags() {
   const grid = document.getElementById('image-grid');
   if (!grid) return;
-  
+
   const cards = grid.querySelectorAll('.image-card');
   cards.forEach(card => {
     const filename = card.dataset.filename;
     const imageData = allImages[filename];
     if (!imageData) return;
-    
+
     const tagsContainer = card.querySelector('.image-tags');
     if (tagsContainer) {
       const tags = imageData.tags || [];
@@ -2654,16 +2677,16 @@ function updateGalleryCardTags() {
 async function saveBulkTags() {
   const tagsInput = document.getElementById('bulk-tags-input').value;
   const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t);
-  
+
   if (tags.length === 0) {
     alert('Please enter at least one tag');
     return;
   }
-  
+
   const selectedArray = Array.from(selectedImages);
   let totalSuccess = 0;
   let hasError = false;
-  
+
   // Use batch API for each tag
   for (const tag of tags) {
     try {
@@ -2672,7 +2695,7 @@ async function saveBulkTags() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filenames: selectedArray, tag })
       });
-      
+
       const result = await response.json();
       if (result.success) {
         totalSuccess += result.results.success;
@@ -2698,14 +2721,14 @@ async function saveBulkTags() {
       console.error(`Error adding tag "${tag}":`, error);
     }
   }
-  
+
   // Clear the input
   document.getElementById('bulk-tags-input').value = '';
-  
+
   // Recalculate and re-render the tag badges
   const countSpan = document.getElementById('bulk-count');
   countSpan.textContent = selectedImages.size;
-  
+
   const tagCounts = {};
   selectedArray.forEach(filename => {
     const imageData = allImages[filename];
@@ -2714,10 +2737,10 @@ async function saveBulkTags() {
       tagCounts[tag] = (tagCounts[tag] || 0) + 1;
     });
   });
-  
+
   const allTags = [];
   const someTags = [];
-  
+
   Object.entries(tagCounts).forEach(([tag, count]) => {
     if (count === selectedArray.length) {
       allTags.push(tag);
@@ -2725,16 +2748,16 @@ async function saveBulkTags() {
       someTags.push(tag);
     }
   });
-  
+
   renderBulkTagBadges('bulk-all-tags', allTags, false);
   renderBulkTagBadges('bulk-some-tags', someTags, true);
   renderBulkTvTagsHelper(allTags);
-  
+
   // Show result if there were errors
   if (hasError) {
     alert(`Some tags may not have been added. Check console for details.`);
   }
-  
+
   // Update sync status since metadata changed
   await updateSyncStatus();
 }
@@ -2743,10 +2766,10 @@ async function saveBulkTags() {
 // Returns aggregated data: each tag appears once with lists of include/exclude TVs
 function getAvailableTvTags() {
   if (!currentImage || !allTVs || allTVs.length === 0) return [];
-  
+
   const imageData = allImages[currentImage];
   const appliedTags = new Set(imageData?.tags || []);
-  
+
   return getTvTagsExcluding(appliedTags);
 }
 
@@ -2761,10 +2784,10 @@ function getTvTagsExcluding(excludeSet) {
   // Collect all TV tags with metadata - aggregate by tag
   // tag -> { includeTvNames: [], excludeTvNames: [] }
   const tvTagsMap = new Map();
-  
+
   for (const tv of allTVs) {
     const tvName = tv.name || 'Unknown TV';
-    
+
     // Include tags
     for (const tag of (tv.tags || [])) {
       if (!excludeSet.has(tag)) {
@@ -2774,7 +2797,7 @@ function getTvTagsExcluding(excludeSet) {
         tvTagsMap.get(tag).includeTvNames.push(tvName);
       }
     }
-    
+
     // Exclude tags
     for (const tag of (tv.exclude_tags || [])) {
       if (!excludeSet.has(tag)) {
@@ -2785,7 +2808,7 @@ function getTvTagsExcluding(excludeSet) {
       }
     }
   }
-  
+
   // Convert to array and sort
   const result = [];
   for (const [tag, data] of tvTagsMap) {
@@ -2799,14 +2822,14 @@ function getTvTagsExcluding(excludeSet) {
       allExclude
     });
   }
-  
+
   result.sort((a, b) => {
     // Tags with includes first, then exclude-only tags
     if (a.allExclude !== b.allExclude) return a.allExclude ? 1 : -1;
     // Then alphabetically
     return a.tag.localeCompare(b.tag);
   });
-  
+
   return result;
 }
 
@@ -2902,18 +2925,18 @@ function renderTvTagsHelper() {
 // Add a single tag from the helper and re-render
 async function addTagFromHelper(tagName) {
   if (!currentImage) return;
-  
+
   try {
     const imageData = allImages[currentImage];
     const existingTags = imageData.tags || [];
     const newTags = mergeTagsCaseInsensitive(existingTags, [tagName]);
-    
+
     const response = await fetch(`${API_BASE}/images/${currentImage}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tags: newTags })
     });
-    
+
     const result = await response.json();
     if (result.success && result.data) {
       allImages[currentImage] = result.data;
@@ -2930,14 +2953,14 @@ async function addTagFromHelper(tagName) {
 // Get TV matches for a specific tag (for tooltips)
 function getTvMatchesForTag(tag) {
   if (!allTVs || allTVs.length === 0) return [];
-  
+
   const matches = [];
-  
+
   for (const tv of allTVs) {
     const tvName = tv.name || 'Unknown TV';
     const includeTags = tv.tags || [];
     const excludeTags = tv.exclude_tags || [];
-    
+
     if (includeTags.includes(tag)) {
       matches.push({ tvName, isExclude: false });
     }
@@ -2945,38 +2968,38 @@ function getTvMatchesForTag(tag) {
       matches.push({ tvName, isExclude: true });
     }
   }
-  
+
   return matches;
 }
 
 // Image modal tag management functions
 function renderImageTagBadges(tags) {
   const container = document.getElementById('modal-tags-badges');
-  
+
   if (tags.length === 0) {
     container.innerHTML = '';
     return;
   }
-  
+
   container.innerHTML = tags.sort().map(tag => {
     const tvMatches = getTvMatchesForTag(tag);
     let tooltip = '';
     let tvInfoHtml = '';
-    
+
     if (tvMatches.length > 0) {
       const matchStrings = tvMatches
         .sort((a, b) => a.tvName.localeCompare(b.tvName))
         .map(m => m.isExclude ? `${m.tvName} (exclude)` : m.tvName);
       tooltip = matchStrings.join(', ');
-      
+
       // Build compact TV info display
       const excludeCount = tvMatches.filter(m => m.isExclude).length;
       const allExclude = excludeCount === tvMatches.length;
       const someExclude = excludeCount > 0 && !allExclude;
-      
+
       let tvLabel;
       let colorClass = '';
-      
+
       if (tvMatches.length === 1) {
         tvLabel = tvMatches[0].isExclude ? `ex:${tvMatches[0].tvName}` : tvMatches[0].tvName;
         if (tvMatches[0].isExclude) colorClass = ' tv-info-exclude';
@@ -2989,7 +3012,7 @@ function renderImageTagBadges(tags) {
       } else {
         tvLabel = `${tvMatches.length} TVs`;
       }
-      
+
       // Only build tvInfoHtml if not already set (for partial exclude case)
       if (!tvInfoHtml) {
         // Truncate to keep tags uniform width
@@ -2999,9 +3022,9 @@ function renderImageTagBadges(tags) {
         tvInfoHtml = `<span class="tag-tv-info${colorClass}">${escapeHtml(tvLabel)}</span>`;
       }
     }
-    
+
     const hasMatchClass = tvMatches.length > 0 ? ' has-tv-match' : '';
-    
+
     return `
     <div class="tag-item${hasMatchClass}" ${tooltip ? `title="${escapeHtml(tooltip)}"` : ''} onclick="removeImageTag('${escapeHtml(tag)}')">
       <div class="tag-content">
@@ -3012,53 +3035,53 @@ function renderImageTagBadges(tags) {
     </div>
   `;
   }).join('');
-  
+
   // Update the TV shuffle indicator
   updateTvShuffleIndicator(tags);
 }
 
 /**
  * Calculate and display which TVs will shuffle this image based on its applied tags.
- * 
+ *
  * This logic mirrors the shuffle eligibility check in frame-art-shuffler's shuffle.py:
  * - If a TV has include_tags set, the image must have at least ONE of those tags
  * - If a TV has exclude_tags set, the image must NOT have ANY of those tags
  * - If a TV has no include_tags and no exclude_tags, the image is always eligible
- * 
+ *
  * NOTE: If frame-art-shuffler's shuffle implementation changes, this logic may need updating.
  */
 function updateTvShuffleIndicator(imageTags) {
   const indicator = document.getElementById('tv-shuffle-indicator');
   if (!indicator) return;
-  
+
   if (!allTVs || allTVs.length === 0) {
     indicator.textContent = '';
     indicator.title = '';
     return;
   }
-  
+
   const imageTagSet = new Set(imageTags || []);
   const eligibleTvNames = [];
-  
+
   for (const tv of allTVs) {
     const tvName = tv.name || 'Unknown TV';
     const includeTags = tv.tags || [];
     const excludeTags = tv.exclude_tags || [];
-    
+
     // Check include tags: if set, image must have at least one
     if (includeTags.length > 0 && !includeTags.some(tag => imageTagSet.has(tag))) {
       continue;
     }
-    
+
     // Check exclude tags: if set, image must not have any
     if (excludeTags.length > 0 && excludeTags.some(tag => imageTagSet.has(tag))) {
       continue;
     }
-    
+
     // Image is eligible for this TV
     eligibleTvNames.push(tvName);
   }
-  
+
   if (eligibleTvNames.length === 0) {
     indicator.innerHTML = 'Will shuffle on: <span style="white-space:nowrap">none</span>';
     indicator.title = 'No TVs will shuffle this image with current tags';
@@ -3068,7 +3091,7 @@ function updateTvShuffleIndicator(imageTags) {
     indicator.title = eligibleTvNames[0];
   } else {
     // Multiple TVs (including all TVs) - use mobile-br class that only breaks on mobile
-    const wrappedNames = eligibleTvNames.slice(0, 3).map(name => 
+    const wrappedNames = eligibleTvNames.slice(0, 3).map(name =>
       `<span style="white-space:nowrap">${escapeHtml(name)}</span>`
     ).join(', ');
     const suffix = eligibleTvNames.length > 3 ? `, +${eligibleTvNames.length - 3} more` : '';
@@ -3079,27 +3102,27 @@ function updateTvShuffleIndicator(imageTags) {
 
 async function removeImageTag(tagName) {
   if (!currentImage) return;
-  
+
   try {
     const imageData = allImages[currentImage];
     const existingTags = imageData.tags || [];
     const newTags = existingTags.filter(t => t !== tagName);
-    
+
     const response = await fetch(`${API_BASE}/images/${currentImage}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tags: newTags })
     });
-    
+
     const result = await response.json();
     if (result.success) {
       // Update local cache
       allImages[currentImage].tags = newTags;
-      
+
       // Re-render badges and TV tags helper
       renderImageTagBadges(newTags);
       renderTvTagsHelper();
-      
+
       // Update sync status since metadata changed
       await updateSyncStatus();
     } else {
@@ -3113,43 +3136,43 @@ async function removeImageTag(tagName) {
 
 async function addImageTags() {
   if (!currentImage) return;
-  
+
   const tagsInput = document.getElementById('modal-tags-input').value;
   const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t);
-  
+
   if (tags.length === 0) {
     alert('Please enter at least one tag');
     return;
   }
-  
+
   console.log(`\n🏷️  [TAG CHANGE] Adding tags to ${currentImage}:`, tags);
-  
+
   try {
     const imageData = allImages[currentImage];
     const existingTags = imageData.tags || [];
     const newTags = mergeTagsCaseInsensitive(existingTags, tags);
-    
+
     const response = await fetch(`${API_BASE}/images/${currentImage}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tags: newTags })
     });
-    
+
     const result = await response.json();
     if (result.success && result.data) {
       console.log(`✅ [TAG CHANGE] Tags updated successfully for ${currentImage}`);
-      
+
       // Update local cache with full response (includes updated timestamp)
       allImages[currentImage] = result.data;
-      
+
       // Clear input and re-render badges
       document.getElementById('modal-tags-input').value = '';
       renderImageTagBadges(result.data.tags || []);
-      
+
       // Reload tags list in background (but not gallery - causes jitter)
       // Gallery will be reloaded when modal closes if there are changes
       loadTags();
-      
+
       // Update sync status since metadata changed
       console.log(`📊 [TAG CHANGE] Updating sync status...`);
       await updateSyncStatus();
@@ -3171,14 +3194,14 @@ function getLastDisplayInfo(filename) {
   if (currentlyDisplaying) {
     return { timeAgo: 'Now', tvName: currentlyDisplaying.tv_name || 'Unknown TV' };
   }
-  
+
   // Fall back to analytics data for historical display info
   const imageData = analyticsData?.images?.[filename];
   if (!imageData?.display_periods) return null;
-  
+
   let lastEnd = 0;
   let lastTvId = null;
-  
+
   for (const [tvId, periods] of Object.entries(imageData.display_periods)) {
     for (const period of periods) {
       if (period.end > lastEnd) {
@@ -3187,9 +3210,9 @@ function getLastDisplayInfo(filename) {
       }
     }
   }
-  
+
   if (!lastEnd || !lastTvId) return null;
-  
+
   // Format time ago - use largest meaningful unit, rounded to nearest
   const now = Date.now();
   const diffMs = now - lastEnd;
@@ -3197,7 +3220,7 @@ function getLastDisplayInfo(filename) {
   const diffHours = Math.round(diffMs / (1000 * 60 * 60));
   const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
   const diffMonths = Math.round(diffDays / 30);
-  
+
   let timeAgo;
   if (diffMonths >= 1) {
     timeAgo = `${diffMonths}mo ago`;
@@ -3208,10 +3231,10 @@ function getLastDisplayInfo(filename) {
   } else {
     timeAgo = `${diffMinutes}m ago`;
   }
-  
+
   // Get TV name
   const tvName = analyticsData?.tvs?.[lastTvId]?.name || 'Unknown TV';
-  
+
   return { timeAgo, tvName };
 }
 
@@ -3220,17 +3243,17 @@ function getLastDisplayInfo(filename) {
  */
 function updateSimilarThresholdBar() {
   let bar = document.getElementById('similar-threshold-bar');
-  
+
   if (!similarFilterActive) {
     if (bar) bar.style.display = 'none';
     return;
   }
-  
+
   // Create bar if it doesn't exist
   if (!bar) {
     const grid = document.getElementById('image-grid');
     if (!grid) return;
-    
+
     bar = document.createElement('div');
     bar.id = 'similar-threshold-bar';
     bar.className = 'similar-threshold-bar';
@@ -3255,22 +3278,22 @@ function updateSimilarThresholdBar() {
       <span id="similar-threshold-value">${similarThreshold}</span>
     `;
     grid.parentNode.insertBefore(bar, grid);
-    
+
     // Add change listener for slider
     const slider = bar.querySelector('#similar-threshold-slider');
     const valueDisplay = bar.querySelector('#similar-threshold-value');
-    
+
     slider.addEventListener('input', (e) => {
       valueDisplay.textContent = e.target.value;
     });
-    
+
     slider.addEventListener('change', async (e) => {
       similarThreshold = parseInt(e.target.value, 10);
       await fetchSimilarGroups(similarThreshold);
       await loadTagsForFilter(); // Update count in dropdown
       renderGallery();
     });
-    
+
     // Add click listeners for preset labels
     bar.querySelectorAll('.slider-preset-label.clickable').forEach(label => {
       label.addEventListener('click', async (e) => {
@@ -3284,9 +3307,9 @@ function updateSimilarThresholdBar() {
       });
     });
   }
-  
+
   bar.style.display = 'flex';
-  
+
   // Update slider value in case threshold changed elsewhere
   const slider = bar.querySelector('#similar-threshold-slider');
   const valueDisplay = bar.querySelector('#similar-threshold-value');
@@ -3294,7 +3317,7 @@ function updateSimilarThresholdBar() {
     slider.value = similarThreshold;
     valueDisplay.textContent = similarThreshold;
   }
-  
+
   // Update ticks based on breakpoints
   updateSliderTicks();
 }
@@ -3305,15 +3328,15 @@ function updateSimilarThresholdBar() {
 function updateSliderTicks() {
   const ticksContainer = document.getElementById('slider-ticks');
   if (!ticksContainer) return;
-  
+
   // Clear existing ticks
   ticksContainer.innerHTML = '';
-  
+
   // Create ticks for each breakpoint within the slider range
   const sliderMin = 10;
   const sliderMax = 60;
   const sliderRange = sliderMax - sliderMin;
-  
+
   for (const bp of similarBreakpoints) {
     if (bp.threshold >= sliderMin && bp.threshold <= sliderMax) {
       const tick = document.createElement('div');
@@ -3321,13 +3344,13 @@ function updateSliderTicks() {
       const position = ((bp.threshold - sliderMin) / sliderRange) * 100;
       tick.style.left = `${position}%`;
       tick.title = `${bp.threshold}: +${bp.addedImages} image${bp.addedImages > 1 ? 's' : ''} (${bp.totalImages} total)`;
-      
+
       // Add count label below tick
       const countLabel = document.createElement('span');
       countLabel.className = 'tick-count';
       countLabel.textContent = `+${bp.addedImages}`;
       tick.appendChild(countLabel);
-      
+
       ticksContainer.appendChild(tick);
     }
   }
@@ -3339,7 +3362,7 @@ function renderGallery(filter = '') {
     console.warn('Gallery render skipped: image grid element not found.');
     return;
   }
-  
+
   // Update similar threshold bar visibility
   updateSimilarThresholdBar();
 
@@ -3352,12 +3375,12 @@ function renderGallery(filter = '') {
   const checkedTvCheckboxes = document.querySelectorAll('.tv-checkbox:checked');
   let includedTags = [];
   let excludedTags = [];
-  
+
   if (checkedTvCheckboxes.length > 0) {
     // TV shortcuts are checked - get tags directly from TV configs (union of all checked TVs)
     const includedSet = new Set();
     const excludedSet = new Set();
-    
+
     checkedTvCheckboxes.forEach(checkbox => {
       const tvId = checkbox.value;
       const tv = allTVs.find(t => (t.device_id || t.entity_id) === tvId);
@@ -3366,7 +3389,7 @@ function renderGallery(filter = '') {
         (tv.exclude_tags || []).forEach(tag => excludedSet.add(tag));
       }
     });
-    
+
     includedTags = Array.from(includedSet);
     excludedTags = Array.from(excludedSet);
   } else {
@@ -3379,14 +3402,14 @@ function renderGallery(filter = '') {
 
   // Filter by search term
   if (searchTerm) {
-    filteredImages = filteredImages.filter(([filename]) => 
+    filteredImages = filteredImages.filter(([filename]) =>
       filename.toLowerCase().includes(searchTerm)
     );
   }
 
   // Filter by included tags (image must have ANY of the included tags)
   if (includedTags.length > 0) {
-    filteredImages = filteredImages.filter(([_, data]) => 
+    filteredImages = filteredImages.filter(([_, data]) =>
       data.tags && includedTags.some(tag => data.tags.includes(tag))
     );
   }
@@ -3404,26 +3427,26 @@ function renderGallery(filter = '') {
   if (noneCheckbox && noneCheckbox.checked) {
     filteredImages = filteredImages.filter(([_, data]) => {
       const imageTagSet = new Set(data.tags || []);
-      
+
       // Check if this image is eligible for ANY TV
       for (const tv of allTVs) {
         const includeTags = tv.tags || [];
         const excludeTags = tv.exclude_tags || [];
-        
+
         // Check include tags: if set, image must have at least one
         if (includeTags.length > 0 && !includeTags.some(tag => imageTagSet.has(tag))) {
           continue;
         }
-        
+
         // Check exclude tags: if set, image must not have any
         if (excludeTags.length > 0 && excludeTags.some(tag => imageTagSet.has(tag))) {
           continue;
         }
-        
+
         // Image is eligible for this TV, so it's NOT a "None" image
         return false;
       }
-      
+
       // Image is not eligible for any TV
       return true;
     });
@@ -3466,25 +3489,25 @@ function renderGallery(filter = '') {
   // engaged when entering duplicate/similar filter mode, and the previous sort
   // state is restored when exiting.
   // ============================================
-  
+
   // Determine if a special grouping filter is active and which groups to use
   const specialFilterActive = similarFilterActive;
   const activeGroups = similarFilterActive ? similarGroups : [];
-  
+
   if (specialFilterActive && activeGroups.length > 0) {
     // IMPLICIT grouping sort mode - groups related images together
     // For similar filter: groups ordered by minimum hamming distance (most similar first)
     // For duplicate filter: groups ordered by newest image's date
     // Images within each group are sorted by their individual upload date
-    
+
     // Build a map of filename -> group index and calculate sort key per group
     const filenameToGroupIndex = new Map();
     const groupSortKeys = [];
-    
+
     activeGroups.forEach((group, groupIndex) => {
       let maxDate = 0;
       let minDistance = Infinity;
-      
+
       group.forEach(filename => {
         filenameToGroupIndex.set(filename, groupIndex);
         const imgData = allImages[filename];
@@ -3493,7 +3516,7 @@ function renderGallery(filter = '') {
           if (date > maxDate) maxDate = date;
         }
       });
-      
+
       // For similar filter, find minimum pairwise distance in this group
       if (similarFilterActive && similarDistances) {
         for (let i = 0; i < group.length; i++) {
@@ -3508,20 +3531,20 @@ function renderGallery(filter = '') {
           }
         }
       }
-      
+
       groupSortKeys[groupIndex] = {
         maxDate,
         minDistance: minDistance === Infinity ? 0 : minDistance
       };
     });
-    
+
     filteredImages.sort((a, b) => {
       const [filenameA, dataA] = a;
       const [filenameB, dataB] = b;
-      
+
       const groupA = filenameToGroupIndex.get(filenameA) ?? -1;
       const groupB = filenameToGroupIndex.get(filenameB) ?? -1;
-      
+
       // Different groups: sort by group's sort key
       if (groupA !== groupB) {
         if (similarFilterActive) {
@@ -3545,7 +3568,7 @@ function renderGallery(filter = '') {
           return groupA - groupB;
         }
       }
-      
+
       // Same group: sort by individual image upload date
       const dateA = new Date(dataA.added || 0).getTime();
       const dateB = new Date(dataB.added || 0).getTime();
@@ -3557,10 +3580,10 @@ function renderGallery(filter = '') {
     filteredImages.sort((a, b) => {
       const [filenameA] = a;
       const [filenameB] = b;
-      
+
       const entriesA = recentlyDisplayedData[filenameA] || [];
       const entriesB = recentlyDisplayedData[filenameB] || [];
-      
+
       // Get most recent timestamp for each image
       const getMostRecentTimestamp = (entries) => {
         if (entries.length === 0) return 0;
@@ -3570,10 +3593,10 @@ function renderGallery(filter = '') {
         // Otherwise use highest timestamp
         return Math.max(...entries.map(e => e.timestamp || 0));
       };
-      
+
       const timestampA = getMostRecentTimestamp(entriesA);
       const timestampB = getMostRecentTimestamp(entriesB);
-      
+
       // Sort descending (most recent first)
       return timestampB - timestampA;
     });
@@ -3582,7 +3605,7 @@ function renderGallery(filter = '') {
     filteredImages.sort((a, b) => {
       const [filenameA, dataA] = a;
       const [filenameB, dataB] = b;
-      
+
       let comparison = 0;
       if (sortOrder === 'date') {
         // Sort by date added
@@ -3603,13 +3626,13 @@ function renderGallery(filter = '') {
         const timeA = isCurrentlyDisplayingA ? Date.now() : (lastDisplayedTimes?.[filenameA] || 0);
         const timeB = isCurrentlyDisplayingB ? Date.now() : (lastDisplayedTimes?.[filenameB] || 0);
         comparison = timeA - timeB;
-        
+
         // If both have same display time (or both never displayed), use added date as tiebreaker
         if (comparison === 0) {
           const dateA = new Date(dataA.added || 0);
           const dateB = new Date(dataB.added || 0);
           comparison = dateA - dateB;
-          
+
           // If still tied, use filename
           if (comparison === 0) {
             comparison = filenameA.localeCompare(filenameB);
@@ -3619,7 +3642,7 @@ function renderGallery(filter = '') {
         // Sort by name (alphabetically)
         comparison = filenameA.localeCompare(filenameB);
       }
-      
+
       // Reverse if descending
       return sortAscending ? comparison : -comparison;
     });
@@ -3663,28 +3686,28 @@ function renderGallery(filter = '') {
 function renderGalleryChunk(grid, count) {
   const startIndex = renderedCount;
   const endIndex = Math.min(startIndex + count, currentFilteredImages.length);
-  
+
   if (startIndex >= currentFilteredImages.length) return;
-  
+
   const chunk = currentFilteredImages.slice(startIndex, endIndex);
-  
+
   const chunkHtml = chunk.map(([filename, data], chunkIndex) => {
     const index = startIndex + chunkIndex; // Global index for selection
     const isSelected = selectedImages.has(filename);
-    
+
     // Check if image is 16:9 (aspect ratio ~1.78)
     const is16x9 = data.aspectRatio && Math.abs(data.aspectRatio - 1.78) < 0.05;
-    
+
     // Check if image meets "sam" criteria: 3840x2160 and <= 20MB
     const width = data.dimensions?.width || 0;
     const height = data.dimensions?.height || 0;
     const fileSize = data.fileSize || 0;
     const fileSizeMB = fileSize / (1024 * 1024);
     const isSam = width === 3840 && height === 2160 && fileSizeMB <= 20;
-    
+
     // Format date
     const dateAdded = formatDate(data.added);
-    
+
     // Build badges HTML for bottom of card
     let badgesHtml = '';
     if (isSam) {
@@ -3693,35 +3716,35 @@ function renderGalleryChunk(grid, count) {
     if (is16x9) {
       badgesHtml += '<span class="aspect-badge-card">16:9</span>';
     }
-    
+
     // Build filter/matte indicator
     const filterMatteSuffix = formatFilterMatteSuffix(data.filter, data.matte);
-    
+
     // Get last display info from analytics (skip if recently displayed filter is active)
     const lastDisplay = recentlyDisplayedFilterActive ? null : getLastDisplayInfo(filename);
-    const lastDisplayHtml = lastDisplay 
+    const lastDisplayHtml = lastDisplay
       ? `<div class="image-last-display">${lastDisplay.timeAgo} (${escapeHtml(lastDisplay.tvName)})</div>`
       : '';
-    
+
     // Get similar images overlay (only when similar filter is active)
     const similarImages = getSimilarImagesForFile(filename);
     const similarOverlayHtml = similarImages.length > 0
       ? `<div class="similar-overlay">Similar: ${similarImages.map(item => `${getDisplayName(item.filename)} (${item.distance})`).join(', ')}</div>`
       : '';
-    
+
     // Get recently displayed overlay (only when recently displayed filter is active)
     const recentlyDisplayedInfo = getRecentlyDisplayedInfoForFile(filename);
     const recentlyDisplayedHtml = recentlyDisplayedInfo.length > 0
       ? `<div class="similar-overlay">${recentlyDisplayedInfo.map(item => `${escapeHtml(item.tvName)} (${item.timeAgo})`).join(', ')}</div>`
       : '';
-    
+
     return `
-    <div class="image-card ${isSelected ? 'selected' : ''}" 
-         data-filename="${filename}" 
+    <div class="image-card ${isSelected ? 'selected' : ''}"
+         data-filename="${filename}"
          data-index="${index}">
       <div class="image-wrapper">
-        <img src="thumbs/thumb_${filename}${thumbnailCacheBusters[filename] ? '?v=' + thumbnailCacheBusters[filename] : ''}" 
-             onerror="this.src='library/${filename}'" 
+        <img src="thumbs/thumb_${filename}${thumbnailCacheBusters[filename] ? '?v=' + thumbnailCacheBusters[filename] : ''}"
+             onerror="this.src='library/${filename}'"
              alt="${getDisplayName(filename)}" />
         <button class="select-badge" data-filename="${filename}" data-index="${index}" title="Select image">
           <span class="select-icon">☑</span>
@@ -3743,11 +3766,11 @@ function renderGalleryChunk(grid, count) {
     </div>
   `;
   }).join('');
-  
+
   // Append to grid
   grid.insertAdjacentHTML('beforeend', chunkHtml);
   renderedCount = endIndex;
-  
+
   // Add click listeners to newly added cards
   const newCards = grid.querySelectorAll(`.image-card[data-index]`);
   newCards.forEach(card => {
@@ -3764,7 +3787,7 @@ function renderGalleryChunk(grid, count) {
           setTimeout(() => selectAnalyticsImage(filename), 300);
           return;
         }
-        
+
         // Check if clicked on select badge
         if (e.target.closest('.select-badge')) {
           e.stopPropagation();
@@ -3776,7 +3799,7 @@ function renderGalleryChunk(grid, count) {
           handleImageClick(card.dataset.filename, parseInt(card.dataset.index), syntheticEvent);
           return;
         }
-        
+
         // If shift or cmd/ctrl is held, select
         if (e.shiftKey || e.metaKey || e.ctrlKey) {
           handleImageClick(card.dataset.filename, parseInt(card.dataset.index), e);
@@ -3786,7 +3809,7 @@ function renderGalleryChunk(grid, count) {
       });
     }
   });
-  
+
   // Show/hide "load more" indicator
   updateLoadMoreIndicator(grid);
 }
@@ -3795,10 +3818,10 @@ function renderGalleryChunk(grid, count) {
 function loadMoreGalleryImages() {
   if (isLoadingMoreImages) return;
   if (renderedCount >= currentFilteredImages.length) return;
-  
+
   const grid = document.getElementById('image-grid');
   if (!grid) return;
-  
+
   isLoadingMoreImages = true;
   renderGalleryChunk(grid, GALLERY_CHUNK_SIZE);
   isLoadingMoreImages = false;
@@ -3809,7 +3832,7 @@ function updateLoadMoreIndicator(grid) {
   // Remove existing indicator
   const existingIndicator = grid.querySelector('.gallery-load-more');
   if (existingIndicator) existingIndicator.remove();
-  
+
   // Add indicator if there are more images to load
   if (renderedCount < currentFilteredImages.length) {
     const remaining = currentFilteredImages.length - renderedCount;
@@ -3824,15 +3847,15 @@ function updateLoadMoreIndicator(grid) {
 function initGalleryInfiniteScroll() {
   // Use the main content area or window for scroll detection
   const scrollContainer = document.querySelector('main') || window;
-  
+
   const handleScroll = () => {
     const grid = document.getElementById('image-grid');
     if (!grid) return;
-    
+
     // Check if gallery tab is active
     const galleryTab = document.getElementById('gallery-tab');
     if (!galleryTab || !galleryTab.classList.contains('active')) return;
-    
+
     // Get scroll position
     let scrollBottom;
     if (scrollContainer === window) {
@@ -3840,15 +3863,15 @@ function initGalleryInfiniteScroll() {
     } else {
       scrollBottom = scrollContainer.scrollTop + scrollContainer.clientHeight;
     }
-    
+
     const gridBottom = grid.offsetTop + grid.offsetHeight;
     const threshold = 300; // Load more when within 300px of bottom
-    
+
     if (scrollBottom >= gridBottom - threshold) {
       loadMoreGalleryImages();
     }
   };
-  
+
   // Throttle scroll handler
   let scrollTimeout;
   const throttledScroll = () => {
@@ -3858,7 +3881,7 @@ function initGalleryInfiniteScroll() {
       scrollTimeout = null;
     }, 100);
   };
-  
+
   scrollContainer.addEventListener('scroll', throttledScroll);
 }
 
@@ -3990,10 +4013,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (DEBUG_ALWAYS_SHOW_TAG_DROPDOWN) return;
     const { btn, dropdown } = getTagFilterElements();
     if (!dropdown || !btn) return;
-    
+
     // Only act if dropdown is open
     if (!tagDropdownState.isOpen) return;
-    
+
     const clickInsideDropdown = dropdown.contains(e.target);
     const clickOnButton = btn.contains(e.target);
     const clickOnShield = e.target.id === 'dropdown-click-shield';
@@ -4008,7 +4031,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Function to resize sort select based on selected option
   function resizeSortSelect(trigger) {
     if (!sortOrderSelect) return;
-    
+
     // Create a temporary span to measure text width
     const tempSpan = document.createElement('span');
     tempSpan.style.visibility = 'hidden';
@@ -4018,10 +4041,10 @@ document.addEventListener('DOMContentLoaded', () => {
     tempSpan.style.fontFamily = window.getComputedStyle(sortOrderSelect).fontFamily;
     tempSpan.textContent = sortOrderSelect.options[sortOrderSelect.selectedIndex].text;
     document.body.appendChild(tempSpan);
-    
+
     const textWidth = tempSpan.offsetWidth;
     document.body.removeChild(tempSpan);
-    
+
     // Set width to text width plus space for arrow (16px)
   const computedWidth = textWidth + 2; // tiny buffer to prevent truncation
     sortOrderSelect.style.setProperty('box-sizing', 'content-box');
@@ -4042,12 +4065,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (sortOrderSelect) {
     sortOrderSelect.addEventListener('change', async () => {
       resizeSortSelect('change');
-      
+
       // Fetch last displayed times if needed for 'displayed' sort
       if (sortOrderSelect.value === 'displayed' && lastDisplayedTimes === null) {
         await fetchLastDisplayedTimes();
       }
-      
+
       renderGallery();
       saveSortPreference(sortOrderSelect.value, sortAscending);
     });
@@ -4251,12 +4274,12 @@ function initUploadForm() {
 
   const fileInput = document.getElementById('image-file');
   const clearFileBtn = document.getElementById('clear-file-btn');
-  
+
   if (fileInput) {
     fileInput.addEventListener('change', async (event) => {
       const file = event.target.files && event.target.files[0] ? event.target.files[0] : null;
       await updateUploadPreview(file);
-      
+
       // Detect image orientation and update matte dropdown
       if (file) {
         detectImageOrientation(file).then(isPortrait => {
@@ -4268,7 +4291,7 @@ function initUploadForm() {
         currentUploadIsPortrait = false;
         updateMatteOptionsForOrientation('matte-select', false);
       }
-      
+
       // Check for duplicates if a file was selected
       if (file) {
         const result = await checkForDuplicates(file);
@@ -4276,7 +4299,7 @@ function initUploadForm() {
       } else {
         showDuplicateWarning([]);
       }
-      
+
       // Show/hide clear button based on file selection
       if (clearFileBtn) {
         clearFileBtn.classList.toggle('hidden', !file);
@@ -4326,7 +4349,7 @@ function initUploadForm() {
     const progressContainer = document.getElementById('upload-progress-container');
     const progressBar = document.getElementById('upload-progress-bar');
     const progressText = document.getElementById('upload-progress-text');
-    
+
     // Reset and show progress UI
     statusDiv.innerHTML = '';
     submitButton.disabled = true;
@@ -4352,16 +4375,16 @@ function initUploadForm() {
     // Handle completion
     xhr.addEventListener('load', async () => {
       activeUploadXhr = null;
-      
+
       try {
         const result = JSON.parse(xhr.responseText);
-        
+
         if (xhr.status >= 200 && xhr.status < 300 && result.success) {
           // Show success state briefly
           progressBar.style.width = '100%';
           progressBar.classList.add('success');
           progressText.textContent = 'Upload complete!';
-          
+
           // Set sort to Date Added, descending (newest first) BEFORE navigation
           sortAscending = false;
           const sortOrderSelect = document.getElementById('sort-order');
@@ -4373,26 +4396,26 @@ function initUploadForm() {
           updateSortDirectionIcon();
           const orderValue = sortOrderSelect ? sortOrderSelect.value : 'date';
           saveSortPreference(orderValue, sortAscending);
-          
+
           // Brief delay to show success, then reset and navigate
           setTimeout(async () => {
             // Reset form for next use
             form.reset();
             resetUploadProgressUI(submitButton, progressContainer, progressBar);
-            
+
             // Clear upload applied tags
             uploadAppliedTags = [];
             renderUploadAppliedTags();
             renderUploadTvTagsHelper();
-            
+
             // Reload tags in case new ones were added
             await loadTags();
-            
+
             // Refresh similar groups and filter count
             await fetchSimilarGroups();
             await fetchSimilarBreakpoints();
             await loadTagsForFilter();
-            
+
             // Close upload modal and return to gallery
             navigateTo('/');
 
@@ -4403,7 +4426,7 @@ function initUploadForm() {
             if (similarFilterActive) {
               renderGallery();
             }
-            
+
             // Trigger auto-sync
             await manualSync();
           }, 500);
@@ -4443,7 +4466,7 @@ function initUploadForm() {
     xhr.open('POST', `${API_BASE}/images/upload`);
     xhr.send(formData);
   });
-  
+
   // Initialize upload tags functionality
   initUploadTags();
 }
@@ -4464,12 +4487,12 @@ let uploadAppliedTags = [];
 function initUploadTags() {
   const addTagsBtn = document.getElementById('upload-add-tags-btn');
   const tagsInput = document.getElementById('tags-input');
-  
+
   if (addTagsBtn && tagsInput) {
     addTagsBtn.addEventListener('click', () => {
       addUploadTags();
     });
-    
+
     tagsInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -4477,7 +4500,7 @@ function initUploadTags() {
       }
     });
   }
-  
+
   // Render initial state
   renderUploadTvTagsHelper();
   renderUploadAppliedTags();
@@ -4487,21 +4510,21 @@ function initUploadTags() {
 function addUploadTags() {
   const tagsInput = document.getElementById('tags-input');
   if (!tagsInput) return;
-  
+
   const inputValue = tagsInput.value;
   const tags = inputValue.split(',').map(t => t.trim()).filter(t => t);
-  
+
   if (tags.length === 0) return;
-  
+
   // Add new tags to applied list (avoiding case-insensitive duplicates)
   uploadAppliedTags = mergeTagsCaseInsensitive(uploadAppliedTags, tags);
-  
+
   // Clear input
   tagsInput.value = '';
-  
+
   // Update hidden form field with comma-separated tags
   updateUploadTagsFormField();
-  
+
   // Re-render
   renderUploadAppliedTags();
   renderUploadTvTagsHelper();
@@ -4521,7 +4544,7 @@ function updateUploadTagsFormField() {
     if (form) form.appendChild(hiddenField);
   }
   hiddenField.value = uploadAppliedTags.join(', ');
-  
+
   // Remove name from original input so it doesn't conflict
   const tagsInput = document.getElementById('tags-input');
   if (tagsInput) tagsInput.removeAttribute('name');
@@ -4633,32 +4656,32 @@ function renderUploadTvTagsHelper() {
 function renderUploadAppliedTags() {
   const container = document.getElementById('upload-applied-tags');
   if (!container) return;
-  
+
   if (uploadAppliedTags.length === 0) {
     container.innerHTML = '';
     return;
   }
-  
+
   const tagsHtml = uploadAppliedTags.map(tag => {
     // Get TV matches for this tag (reuse existing function)
     const tvMatches = getTvMatchesForTag(tag);
     let tooltip = '';
     let tvInfoHtml = '';
-    
+
     if (tvMatches.length > 0) {
       const matchStrings = tvMatches
         .sort((a, b) => a.tvName.localeCompare(b.tvName))
         .map(m => m.isExclude ? `${m.tvName} (exclude)` : m.tvName);
       tooltip = matchStrings.join(', ');
-      
+
       // Build compact TV info display
       const excludeCount = tvMatches.filter(m => m.isExclude).length;
       const allExclude = excludeCount === tvMatches.length;
       const someExclude = excludeCount > 0 && !allExclude;
-      
+
       let tvLabel;
       let colorClass = '';
-      
+
       if (tvMatches.length === 1) {
         tvLabel = tvMatches[0].isExclude ? `ex:${tvMatches[0].tvName}` : tvMatches[0].tvName;
         if (tvMatches[0].isExclude) colorClass = ' tv-info-exclude';
@@ -4671,7 +4694,7 @@ function renderUploadAppliedTags() {
       } else {
         tvLabel = `${tvMatches.length} TVs`;
       }
-      
+
       // Only build tvInfoHtml if not already set (for partial exclude case)
       if (!tvInfoHtml) {
         // Truncate to keep tags uniform width
@@ -4681,9 +4704,9 @@ function renderUploadAppliedTags() {
         tvInfoHtml = `<span class="tag-tv-info${colorClass}">${escapeHtml(tvLabel)}</span>`;
       }
     }
-    
+
     const hasMatchClass = tvMatches.length > 0 ? ' has-tv-match' : '';
-    
+
     return `<div class="tag-item${hasMatchClass}" onclick="removeUploadTag('${escapeHtml(tag)}')" ${tooltip ? `title="${escapeHtml(tooltip)}"` : 'title="Click to remove"'}>
       <div class="tag-content">
         <span class="tag-name">${escapeHtml(tag)}</span>
@@ -4692,14 +4715,14 @@ function renderUploadAppliedTags() {
       <span class="tag-remove">×</span>
     </div>`;
   }).join('');
-  
+
   container.innerHTML = tagsHtml;
 }
 
 // Batch Upload Functions
 function initBatchUploadForm() {
   const batchUploadBtn = document.getElementById('open-batch-upload-btn');
-  
+
   if (batchUploadBtn) {
     batchUploadBtn.addEventListener('click', () => {
       // Create a file input that allows multiple selection
@@ -4708,20 +4731,20 @@ function initBatchUploadForm() {
       fileInput.multiple = true;
       fileInput.accept = 'image/*';
       fileInput.style.display = 'none';
-      
+
       // Attach to DOM - required for iOS to reliably deliver multi-select files
       document.body.appendChild(fileInput);
-      
+
       fileInput.addEventListener('change', async (e) => {
         const files = Array.from(e.target.files);
         // Clean up input after getting files
         fileInput.remove();
-        
+
         if (files.length === 0) return;
-        
+
         await uploadBatchImages(files);
       });
-      
+
       // Trigger file picker
       fileInput.click();
     });
@@ -4749,9 +4772,9 @@ async function uploadBatchImages(files) {
   const uploadedOriginalNames = {}; // Map server filename -> original filename
   const totalFiles = files.length;
   let cancelled = false;
-  
+
   console.log(`[BatchUpload] Starting upload of ${totalFiles} files`);
-  
+
   // Show progress indicator in gallery with progress bar
   const grid = document.getElementById('image-grid');
   const progressDiv = document.createElement('div');
@@ -4770,20 +4793,20 @@ async function uploadBatchImages(files) {
   `;
   grid.innerHTML = '';
   grid.appendChild(progressDiv);
-  
+
   const counterEl = progressDiv.querySelector('div:nth-child(2)');
   const progressBar = progressDiv.querySelector('.batch-progress-bar');
   const statusDetail = progressDiv.querySelector('.batch-status-detail');
   const fileLabel = progressDiv.querySelector('.batch-progress-file');
   const cancelBtn = progressDiv.querySelector('.batch-cancel-btn');
-  
+
   cancelBtn.addEventListener('click', () => {
     cancelled = true;
     cancelBtn.textContent = 'Cancelling...';
     cancelBtn.disabled = true;
     console.log('[BatchUpload] User cancelled upload');
   });
-  
+
   // Helper to add status line
   const addStatusLine = (text, isError = false) => {
     const line = document.createElement('div');
@@ -4795,19 +4818,19 @@ async function uploadBatchImages(files) {
       statusDetail.removeChild(statusDetail.lastChild);
     }
   };
-  
+
   // Upload each file with XHR for progress
   for (let i = 0; i < files.length; i++) {
     if (cancelled) {
       console.log(`[BatchUpload] Skipping remaining ${files.length - i} files due to cancellation`);
       break;
     }
-    
+
     const file = files[i];
     const shortName = file.name.length > 30 ? file.name.substring(0, 27) + '...' : file.name;
-    
+
     console.log(`[BatchUpload] Processing file ${i + 1}/${totalFiles}: ${file.name} (${formatFileSize(file.size)})`);
-    
+
     // Check file size before uploading
     if (file.size > MAX_FILE_SIZE) {
       skippedCount++;
@@ -4817,24 +4840,24 @@ async function uploadBatchImages(files) {
       });
       console.warn(`[BatchUpload] Skipped ${file.name}: ${formatFileSize(file.size)} exceeds 20MB limit`);
       addStatusLine(`⊘ ${shortName} - too large`, true);
-      
+
       const completedCount = i + 1;
       counterEl.textContent = `${completedCount} / ${totalFiles}`;
       continue;
     }
-    
+
     // Show current file being uploaded
     fileLabel.textContent = `Uploading: ${shortName}`;
     progressBar.style.width = '0%';
-    
+
     const uploadStartTime = Date.now();
     try {
       const result = await uploadSingleFileWithProgress(file, (percent) => {
         progressBar.style.width = `${percent}%`;
       }, UPLOAD_TIMEOUT_MS);
-      
+
       const uploadDuration = ((Date.now() - uploadStartTime) / 1000).toFixed(1);
-      
+
       if (result.success) {
         successCount++;
         if (result.filename) {
@@ -4849,70 +4872,70 @@ async function uploadBatchImages(files) {
         console.error(`[BatchUpload] ✗ Failed to upload ${file.name}:`, errorMsg);
         addStatusLine(`✗ ${shortName} - ${errorMsg}`, true);
       }
-      
+
       const completedCount = i + 1;
       counterEl.textContent = `${completedCount} / ${totalFiles}`;
       progressBar.style.width = '100%';
-      
+
     } catch (error) {
       errorCount++;
       const errorMsg = error.message || 'Unknown error';
       errorFiles.push({ name: file.name, error: errorMsg });
       console.error(`[BatchUpload] ✗ Error uploading ${file.name}:`, error);
       addStatusLine(`✗ ${shortName} - ${errorMsg}`, true);
-      
+
       const completedCount = i + 1;
       counterEl.textContent = `${completedCount} / ${totalFiles}`;
     }
   }
-  
+
   console.log(`[BatchUpload] Completed: ${successCount} success, ${errorCount} errors, ${skippedCount} skipped`);
-  
+
   fileLabel.textContent = '';
-  
+
   // Build summary message
   let summaryParts = [];
-  
+
   if (successCount > 0) {
     summaryParts.push(`${successCount} image${successCount !== 1 ? 's' : ''} uploaded successfully`);
   }
-  
+
   if (skippedCount > 0) {
     summaryParts.push(`${skippedCount} skipped (over 20MB limit)`);
   }
-  
+
   if (errorCount > 0) {
     summaryParts.push(`${errorCount} failed`);
   }
-  
+
   if (cancelled) {
     const remaining = totalFiles - (successCount + errorCount + skippedCount);
     if (remaining > 0) {
       summaryParts.push(`${remaining} cancelled`);
     }
   }
-  
+
   // Show result summary if there were issues
   if (skippedCount > 0 || errorCount > 0 || cancelled) {
     let message = 'Batch upload completed:\n\n' + summaryParts.join('\n');
-    
+
     if (skippedFiles.length > 0) {
       message += '\n\nSkipped files (over 20MB):';
       skippedFiles.forEach(file => {
         message += `\n• ${file.name} (${file.size})`;
       });
     }
-    
+
     if (errorFiles.length > 0) {
       message += '\n\nFailed files:';
       errorFiles.forEach(file => {
         message += `\n• ${file.name}: ${file.error}`;
       });
     }
-    
+
     alert(message);
   }
-  
+
   if (successCount > 0) {
     setGallerySortToNewestFirst();
   }
@@ -4920,22 +4943,22 @@ async function uploadBatchImages(files) {
   // Reload gallery and tags
   await loadGallery();
   await loadTags();
-  
+
   // Refresh similar groups for filter counts
   if (uploadedFilenames.length > 0) {
     await fetchSimilarGroups();
     await fetchSimilarBreakpoints();
     // Refresh tag filter to show updated similar counts
     await loadTagsForFilter();
-    
+
     // Re-render gallery if special filter is active (so new items appear)
     if (similarFilterActive) {
       renderGallery();
     }
-    
+
     const similarFilenames = getSimilarFilenames();
     const uploadedSimilar = uploadedFilenames.filter(f => similarFilenames.has(f));
-    
+
     // If any uploaded images are similar to existing images, show notification
     if (uploadedSimilar.length > 0) {
       // Find which existing images they are similar to
@@ -4951,13 +4974,13 @@ async function uploadBatchImages(files) {
           }
         }
       }
-      
+
       if (similarInfo.length > 0) {
         alert(`Some uploaded images may be duplicates:\n\n${similarInfo.join('\n\n')}\n\nSelect "Similar Images" in the tag filter to investigate.`);
       }
     }
   }
-  
+
   // Auto-select the uploaded images for easy batch tagging
   if (uploadedFilenames.length > 0) {
     selectedImages.clear();
@@ -4967,7 +4990,7 @@ async function uploadBatchImages(files) {
     // Use lightweight visual update instead of full re-render to prevent scroll flickering
     updateGallerySelectionVisual();
   }
-  
+
   // Trigger auto-sync
   await manualSync();
 }
@@ -4981,17 +5004,17 @@ function uploadSingleFileWithProgress(file, onProgress, timeoutMs = 120000) {
     formData.append('matte', 'none');
     formData.append('filter', 'none');
     formData.append('tags', '');
-    
+
     // Set timeout for the request
     xhr.timeout = timeoutMs;
-    
+
     xhr.upload.addEventListener('progress', (e) => {
       if (e.lengthComputable) {
         const percent = Math.round((e.loaded / e.total) * 100);
         onProgress(percent);
       }
     });
-    
+
     xhr.addEventListener('load', () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
@@ -5014,19 +5037,19 @@ function uploadSingleFileWithProgress(file, onProgress, timeoutMs = 120000) {
         resolve({ success: false, error: errorMsg });
       }
     });
-    
+
     xhr.addEventListener('error', () => {
       reject(new Error('Network error - check your connection'));
     });
-    
+
     xhr.addEventListener('timeout', () => {
       reject(new Error('Upload timed out - file may be too large or connection too slow'));
     });
-    
+
     xhr.addEventListener('abort', () => {
       resolve({ success: false, error: 'Cancelled' });
     });
-    
+
     xhr.open('POST', `${API_BASE}/images/upload`);
     xhr.send(formData);
   });
@@ -5073,21 +5096,21 @@ async function loadTags() {
 function countImagesForTV(tv) {
   const includeTags = tv.tags || [];
   const excludeTags = tv.exclude_tags || [];
-  
+
   let count = 0;
   for (const [filename, data] of Object.entries(allImages)) {
     const imageTagSet = new Set(data.tags || []);
-    
+
     // Check include tags: if set, image must have at least one
     if (includeTags.length > 0 && !includeTags.some(tag => imageTagSet.has(tag))) {
       continue;
     }
-    
+
     // Check exclude tags: if set, image must not have any
     if (excludeTags.length > 0 && excludeTags.some(tag => imageTagSet.has(tag))) {
       continue;
     }
-    
+
     count++;
   }
   return count;
@@ -5111,26 +5134,26 @@ function countImagesForNone() {
   for (const [filename, data] of Object.entries(allImages)) {
     const imageTagSet = new Set(data.tags || []);
     let matchesAnyTV = false;
-    
+
     for (const tv of allTVs) {
       const includeTags = tv.tags || [];
       const excludeTags = tv.exclude_tags || [];
-      
+
       // Check include tags: if set, image must have at least one
       if (includeTags.length > 0 && !includeTags.some(tag => imageTagSet.has(tag))) {
         continue;
       }
-      
+
       // Check exclude tags: if set, image must not have any
       if (excludeTags.length > 0 && excludeTags.some(tag => imageTagSet.has(tag))) {
         continue;
       }
-      
+
       // Image matches this TV
       matchesAnyTV = true;
       break;
     }
-    
+
     if (!matchesAnyTV) {
       count++;
     }
@@ -5145,7 +5168,7 @@ function countImagesForNone() {
  */
 async function loadTagsForFilter(options = {}) {
   const { skipRender = false } = options;
-  
+
   try {
     // *** SAVE CURRENT FILTER STATE BEFORE REBUILDING ***
     // This preserves user selections when the dropdown is rebuilt (e.g., after tag count updates)
@@ -5157,9 +5180,9 @@ async function loadTagsForFilter(options = {}) {
       noneChecked: document.querySelector('.tv-none-checkbox')?.checked || false,
       // Special filters are stored in global variables, no need to save/restore
     };
-    const hadSelections = savedState.includedTags.size > 0 || savedState.excludedTags.size > 0 || 
+    const hadSelections = savedState.includedTags.size > 0 || savedState.excludedTags.size > 0 ||
                           savedState.checkedTVs.size > 0 || savedState.checkedTagsets.size > 0 || savedState.noneChecked;
-    
+
     const response = await fetch(`${API_BASE}/tags`);
     allTags = await response.json();
 
@@ -5174,13 +5197,13 @@ async function loadTagsForFilter(options = {}) {
 
     // Special Filters Section (at top)
     html += `<div class="tv-shortcuts-header">Filters</div>`;
-    
+
     // Similar Images filter
     const { dupeCount, simCount } = getSimilarBreakpointCounts();
     html += `
       <div class="multiselect-option tv-shortcut similar-filter">
-        <input type="checkbox" id="filter-similar" 
-               value="similar" 
+        <input type="checkbox" id="filter-similar"
+               value="similar"
                class="similar-checkbox"
                ${similarFilterActive ? 'checked' : ''}>
         <label for="filter-similar">
@@ -5189,13 +5212,13 @@ async function loadTagsForFilter(options = {}) {
         </label>
       </div>
     `;
-    
+
     // Portrait filter
     const portraitCount = countPortraitImages();
     html += `
       <div class="multiselect-option tv-shortcut portrait-filter">
-        <input type="checkbox" id="filter-portrait" 
-               value="portrait" 
+        <input type="checkbox" id="filter-portrait"
+               value="portrait"
                class="portrait-checkbox"
                ${portraitFilterActive ? 'checked' : ''}>
         <label for="filter-portrait">
@@ -5204,13 +5227,13 @@ async function loadTagsForFilter(options = {}) {
         </label>
       </div>
     `;
-    
+
     // Non 16:9 filter
     const non169Count = countNon169Images();
     html += `
       <div class="multiselect-option tv-shortcut non169-filter">
-        <input type="checkbox" id="filter-non169" 
-               value="non169" 
+        <input type="checkbox" id="filter-non169"
+               value="non169"
                class="non169-checkbox"
                ${non169FilterActive ? 'checked' : ''}>
         <label for="filter-non169">
@@ -5219,13 +5242,13 @@ async function loadTagsForFilter(options = {}) {
         </label>
       </div>
     `;
-    
+
     // Recently Displayed filter (at bottom of special filters)
     const recentCount = getRecentlyDisplayedFilenames().size;
     html += `
       <div class="multiselect-option tv-shortcut recently-displayed-filter">
-        <input type="checkbox" id="filter-recently-displayed" 
-               value="recently-displayed" 
+        <input type="checkbox" id="filter-recently-displayed"
+               value="recently-displayed"
                class="recently-displayed-checkbox"
                ${recentlyDisplayedFilterActive ? 'checked' : ''}>
         <label for="filter-recently-displayed">
@@ -5234,19 +5257,19 @@ async function loadTagsForFilter(options = {}) {
         </label>
       </div>
     `;
-    
+
     html += `<div class="tv-shortcuts-divider"></div>`;
 
     // TV Shortcuts Section
     if (allTVs.length > 0) {
       html += `<div class="tv-shortcuts-header">TVs</div>`;
-      
+
       // None filter at top of TVs
       const noneCount = countImagesForNone();
       html += `
         <div class="multiselect-option tv-shortcut">
-          <input type="checkbox" id="tv-shortcut-none" 
-                 value="none" 
+          <input type="checkbox" id="tv-shortcut-none"
+                 value="none"
                  class="tv-none-checkbox">
           <label for="tv-shortcut-none">
             <div class="tv-name">None <span class="tv-count">(${noneCount})</span></div>
@@ -5254,17 +5277,17 @@ async function loadTagsForFilter(options = {}) {
           </label>
         </div>
       `;
-      
+
       html += allTVs.map(tv => {
         const safeTags = JSON.stringify(tv.tags || []).replace(/"/g, '&quot;');
         const id = tv.device_id || tv.entity_id;
-        
+
         // Count images that match this TV's criteria
         const matchCount = countImagesForTV(tv);
-        
+
         // Get active tagset name (override takes precedence)
         const activeTagset = tv.override_tagset || tv.selected_tagset;
-        
+
         let subtitleHtml = '';
         if (activeTagset) {
           subtitleHtml += `<div class="tv-tags-subtitle">Tagset: ${escapeHtml(activeTagset)}</div>`;
@@ -5278,8 +5301,8 @@ async function loadTagsForFilter(options = {}) {
 
         return `
         <div class="multiselect-option tv-shortcut">
-          <input type="checkbox" id="tv-shortcut-${id}" 
-                 value="${id}" 
+          <input type="checkbox" id="tv-shortcut-${id}"
+                 value="${id}"
                  class="tv-checkbox"
                  data-tags="${safeTags}">
           <label for="tv-shortcut-${id}">
@@ -5290,19 +5313,19 @@ async function loadTagsForFilter(options = {}) {
       `}).join('');
       html += `<div class="tv-shortcuts-divider"></div>`;
     }
-    
+
     // Tagsets Section
     const tagsetNames = Object.keys(allGlobalTagsets || {});
     if (tagsetNames.length > 0) {
       html += `<div class="tv-shortcuts-header">Tagsets</div>`;
-      
+
       html += tagsetNames.map(tagsetName => {
         const tagset = allGlobalTagsets[tagsetName];
         const includeTags = tagset.tags || [];
         const excludeTags = tagset.exclude_tags || [];
         const safeIncludeTags = JSON.stringify(includeTags).replace(/"/g, '&quot;');
         const safeExcludeTags = JSON.stringify(excludeTags).replace(/"/g, '&quot;');
-        
+
         // Count images that match this tagset's criteria
         let matchCount = 0;
         for (const [filename, data] of Object.entries(allImages)) {
@@ -5315,7 +5338,7 @@ async function loadTagsForFilter(options = {}) {
           }
           matchCount++;
         }
-        
+
         let subtitleHtml = '';
         if (includeTags.length > 0) {
           subtitleHtml += `<div class="tv-tags-subtitle">+ ${includeTags.join(', ')}</div>`;
@@ -5329,8 +5352,8 @@ async function loadTagsForFilter(options = {}) {
 
         return `
         <div class="multiselect-option tv-shortcut">
-          <input type="checkbox" id="tagset-shortcut-${escapeHtml(tagsetName)}" 
-                 value="${escapeHtml(tagsetName)}" 
+          <input type="checkbox" id="tagset-shortcut-${escapeHtml(tagsetName)}"
+                 value="${escapeHtml(tagsetName)}"
                  class="tagset-checkbox"
                  data-include-tags="${safeIncludeTags}"
                  data-exclude-tags="${safeExcludeTags}">
@@ -5342,7 +5365,7 @@ async function loadTagsForFilter(options = {}) {
       `}).join('');
       html += `<div class="tv-shortcuts-divider"></div>`;
     }
-    
+
     // Tags Section
     html += `<div class="tags-header">Tags</div>`;
     html += allTags.map(tag => {
@@ -5361,14 +5384,14 @@ async function loadTagsForFilter(options = {}) {
     const checkboxes = dropdownOptions.querySelectorAll('.tag-checkbox');
     checkboxes.forEach(checkbox => {
       const option = checkbox.closest('.multiselect-option');
-      
+
       // Handle click on checkbox or label to cycle through states
       const cycleTagState = (e) => {
         e.stopPropagation();
-        
+
         const currentState = checkbox.dataset.state || 'unchecked';
         let newState;
-        
+
         // Cycle: unchecked → included → excluded → unchecked
         if (currentState === 'unchecked') {
           newState = 'included';
@@ -5377,30 +5400,30 @@ async function loadTagsForFilter(options = {}) {
         } else {
           newState = 'unchecked';
         }
-        
+
         // Use setTimeout to let the native click complete first, then override
         setTimeout(() => {
           setTagState(checkbox, newState);
-          
+
           // Clear "None" checkbox when manually selecting tags
           const noneCheckbox = document.querySelector('.tv-none-checkbox');
           if (noneCheckbox) {
             noneCheckbox.checked = false;
           }
-          
+
           // Clear special filters when selecting tags
           clearSimilarFilter();
           clearPortraitFilter();
           clearNon169Filter();
           clearRecentlyDisplayedFilter();
-          
+
           updateTagFilterDisplay();
           updateTVShortcutStates();
         }, 0);
       };
-      
+
       checkbox.addEventListener('click', cycleTagState);
-      
+
       const label = checkbox.nextElementSibling;
       if (label) {
         label.addEventListener('click', (e) => {
@@ -5434,7 +5457,7 @@ async function loadTagsForFilter(options = {}) {
       recentlyDisplayedCheckbox.addEventListener('change', async (e) => {
         const wasActive = recentlyDisplayedFilterActive;
         recentlyDisplayedFilterActive = e.target.checked;
-        
+
         if (recentlyDisplayedFilterActive && !wasActive) {
           // Save current sort state before entering recently displayed filter mode
           const sortOrderSelect = document.getElementById('sort-order');
@@ -5442,10 +5465,10 @@ async function loadTagsForFilter(options = {}) {
             order: sortOrderSelect ? sortOrderSelect.value : 'date',
             ascending: sortAscending
           };
-          
+
           // Fetch fresh recently displayed data
           await fetchRecentlyDisplayed();
-          
+
           // Clear other filters when enabling recently displayed filter
           const noneCheckbox = document.querySelector('.tv-none-checkbox');
           if (noneCheckbox) noneCheckbox.checked = false;
@@ -5465,7 +5488,7 @@ async function loadTagsForFilter(options = {}) {
             preRecentSortState = null;
           }
         }
-        
+
         updateTagFilterDisplay();
         filterAndRenderGallery();
         // Close dropdown after selecting special filter
@@ -5481,7 +5504,7 @@ async function loadTagsForFilter(options = {}) {
       similarCheckbox.addEventListener('change', async (e) => {
         const wasActive = similarFilterActive;
         similarFilterActive = e.target.checked;
-        
+
         if (similarFilterActive && !wasActive) {
           // Save current sort state before entering similar filter mode
           const sortOrderSelect = document.getElementById('sort-order');
@@ -5493,7 +5516,7 @@ async function loadTagsForFilter(options = {}) {
           if (sortOrderSelect) sortOrderSelect.value = 'date';
           sortAscending = false;
           updateSortDirectionIcon();
-          
+
           // Fetch fresh similar data and breakpoints
           await Promise.all([
             fetchSimilarGroups(),
@@ -5521,7 +5544,7 @@ async function loadTagsForFilter(options = {}) {
             preSimilarSortState = null;
           }
         }
-        
+
         updateTagFilterDisplay();
         filterAndRenderGallery();
         // Close dropdown after selecting special filter
@@ -5536,7 +5559,7 @@ async function loadTagsForFilter(options = {}) {
     if (portraitCheckbox) {
       portraitCheckbox.addEventListener('change', (e) => {
         portraitFilterActive = e.target.checked;
-        
+
         if (portraitFilterActive) {
           // Clear other filters when enabling portrait filter
           const noneCheckbox = document.querySelector('.tv-none-checkbox');
@@ -5551,7 +5574,7 @@ async function loadTagsForFilter(options = {}) {
           document.querySelectorAll('.tag-checkbox').forEach(cb => setTagState(cb, 'unchecked'));
           document.querySelectorAll('.tv-checkbox').forEach(cb => { cb.checked = false; });
         }
-        
+
         updateTagFilterDisplay();
         filterAndRenderGallery();
         // Close dropdown after selecting special filter
@@ -5566,7 +5589,7 @@ async function loadTagsForFilter(options = {}) {
     if (non169Checkbox) {
       non169Checkbox.addEventListener('change', (e) => {
         non169FilterActive = e.target.checked;
-        
+
         if (non169FilterActive) {
           // Clear other filters when enabling non-16:9 filter
           const noneCheckbox = document.querySelector('.tv-none-checkbox');
@@ -5581,7 +5604,7 @@ async function loadTagsForFilter(options = {}) {
           document.querySelectorAll('.tag-checkbox').forEach(cb => setTagState(cb, 'unchecked'));
           document.querySelectorAll('.tv-checkbox').forEach(cb => { cb.checked = false; });
         }
-        
+
         updateTagFilterDisplay();
         filterAndRenderGallery();
         // Close dropdown after selecting special filter
@@ -5594,7 +5617,7 @@ async function loadTagsForFilter(options = {}) {
     // *** RESTORE SAVED FILTER STATE ***
     if (hadSelections) {
       console.log('[TagFilter] Restoring filter state after rebuild');
-      
+
       // Restore tag states
       document.querySelectorAll('.tag-checkbox').forEach(cb => {
         const tagLower = cb.value.toLowerCase();
@@ -5604,17 +5627,17 @@ async function loadTagsForFilter(options = {}) {
           setTagState(cb, 'excluded');
         }
       });
-      
+
       // Restore TV checkbox states
       document.querySelectorAll('.tv-checkbox').forEach(cb => {
         cb.checked = savedState.checkedTVs.has(cb.value);
       });
-      
+
       // Restore tagset checkbox states
       document.querySelectorAll('.tagset-checkbox').forEach(cb => {
         cb.checked = savedState.checkedTagsets.has(cb.value);
       });
-      
+
       // Restore "None" checkbox state
       const noneCheckbox = document.querySelector('.tv-none-checkbox');
       if (noneCheckbox) {
@@ -5642,12 +5665,12 @@ function getTagCheckbox(tagName) {
 // Set a tag checkbox to one of three states: unchecked, included, excluded
 function setTagState(checkbox, state) {
   const option = checkbox.closest('.multiselect-option');
-  
+
   checkbox.dataset.state = state;
   if (option) {
     option.dataset.state = state;
   }
-  
+
   // We don't actually use the checked property for display anymore,
   // but keep it somewhat in sync for any code that might check it
   if (state === 'unchecked') {
@@ -5668,13 +5691,13 @@ function getTagState(checkbox) {
  */
 function clearSimilarFilter() {
   if (!similarFilterActive) return;
-  
+
   // Uncheck the similar checkbox in the UI
   const similarCheckbox = document.querySelector('.similar-checkbox');
   if (similarCheckbox) {
     similarCheckbox.checked = false;
   }
-  
+
   // Restore previous sort state
   if (preSimilarSortState) {
     const sortOrderSelect = document.getElementById('sort-order');
@@ -5683,7 +5706,7 @@ function clearSimilarFilter() {
     updateSortDirectionIcon();
     preSimilarSortState = null;
   }
-  
+
   similarFilterActive = false;
 }
 
@@ -5693,13 +5716,13 @@ function clearSimilarFilter() {
  */
 function clearNon169Filter() {
   if (!non169FilterActive) return;
-  
+
   // Uncheck the non169 checkbox in the UI
   const non169Checkbox = document.querySelector('.non169-checkbox');
   if (non169Checkbox) {
     non169Checkbox.checked = false;
   }
-  
+
   non169FilterActive = false;
 }
 
@@ -5709,13 +5732,13 @@ function clearNon169Filter() {
  */
 function clearPortraitFilter() {
   if (!portraitFilterActive) return;
-  
+
   // Uncheck the portrait checkbox in the UI
   const portraitCheckbox = document.querySelector('.portrait-checkbox');
   if (portraitCheckbox) {
     portraitCheckbox.checked = false;
   }
-  
+
   portraitFilterActive = false;
 }
 
@@ -5738,35 +5761,35 @@ function getExcludedTags() {
 function handleTVShortcutChange(event) {
   const tvCheckbox = event.target;
   const tvId = tvCheckbox.value;
-  
+
   // Find the TV object to get both include and exclude tags
   const tv = allTVs.find(t => (t.device_id || t.entity_id) === tvId);
   if (!tv) return;
-  
+
   const includeTags = tv.tags || [];
   const excludeTags = tv.exclude_tags || [];
   const isChecked = tvCheckbox.checked;
-  
+
   // Clear "None" checkbox when selecting a TV
   const noneCheckbox = document.querySelector('.tv-none-checkbox');
   if (noneCheckbox) {
     noneCheckbox.checked = false;
   }
-  
+
   // Clear tagset checkboxes (mutually exclusive)
   const allTagsetCheckboxes = document.querySelectorAll('.tagset-checkbox');
   allTagsetCheckboxes.forEach(cb => cb.checked = false);
-  
+
   // Clear special filters when selecting a TV shortcut
   clearSimilarFilter();
   clearPortraitFilter();
   clearNon169Filter();
   clearRecentlyDisplayedFilter();
-  
+
   // Clear all tag states first
   const allTagCheckboxes = document.querySelectorAll('.tag-checkbox');
   allTagCheckboxes.forEach(cb => setTagState(cb, 'unchecked'));
-  
+
   if (isChecked) {
     // Set include tags to 'included' state
     includeTags.forEach(tag => {
@@ -5775,7 +5798,7 @@ function handleTVShortcutChange(event) {
         setTagState(tagCheckbox, 'included');
       }
     });
-    
+
     // Set exclude tags to 'excluded' state
     excludeTags.forEach(tag => {
       const tagCheckbox = getTagCheckbox(tag);
@@ -5784,7 +5807,7 @@ function handleTVShortcutChange(event) {
       }
     });
   }
-  
+
   updateTagFilterDisplay();
   filterAndRenderGallery();
 }
@@ -5792,7 +5815,7 @@ function handleTVShortcutChange(event) {
 function handleTagsetShortcutChange(event) {
   const tagsetCheckbox = event.target;
   const tagsetName = tagsetCheckbox.value;
-  
+
   // Get include/exclude tags from data attributes
   let includeTags = [];
   let excludeTags = [];
@@ -5802,35 +5825,35 @@ function handleTagsetShortcutChange(event) {
   } catch (e) {
     console.error('Error parsing tagset tags:', e);
   }
-  
+
   const isChecked = tagsetCheckbox.checked;
-  
+
   // Clear "None" checkbox when selecting a tagset
   const noneCheckbox = document.querySelector('.tv-none-checkbox');
   if (noneCheckbox) {
     noneCheckbox.checked = false;
   }
-  
+
   // Clear TV checkboxes (mutually exclusive)
   const allTvCheckboxes = document.querySelectorAll('.tv-checkbox');
   allTvCheckboxes.forEach(cb => cb.checked = false);
-  
+
   // Clear other tagset checkboxes (mutually exclusive)
   const allTagsetCheckboxes = document.querySelectorAll('.tagset-checkbox');
   allTagsetCheckboxes.forEach(cb => {
     if (cb !== tagsetCheckbox) cb.checked = false;
   });
-  
+
   // Clear special filters when selecting a tagset shortcut
   clearSimilarFilter();
   clearPortraitFilter();
   clearNon169Filter();
   clearRecentlyDisplayedFilter();
-  
+
   // Clear all tag states first
   const allTagCheckboxes = document.querySelectorAll('.tag-checkbox');
   allTagCheckboxes.forEach(cb => setTagState(cb, 'unchecked'));
-  
+
   if (isChecked) {
     // Set include tags to 'included' state
     includeTags.forEach(tag => {
@@ -5839,7 +5862,7 @@ function handleTagsetShortcutChange(event) {
         setTagState(tagCheckbox, 'included');
       }
     });
-    
+
     // Set exclude tags to 'excluded' state
     excludeTags.forEach(tag => {
       const tagCheckbox = getTagCheckbox(tag);
@@ -5848,7 +5871,7 @@ function handleTagsetShortcutChange(event) {
       }
     });
   }
-  
+
   updateTagFilterDisplay();
   filterAndRenderGallery();
 }
@@ -5856,27 +5879,27 @@ function handleTagsetShortcutChange(event) {
 function handleNoneShortcutChange(event) {
   const noneCheckbox = event.target;
   const isChecked = noneCheckbox.checked;
-  
+
   if (isChecked) {
     // Clear all TV shortcuts when selecting "None"
     const allTvCheckboxes = document.querySelectorAll('.tv-checkbox');
     allTvCheckboxes.forEach(cb => cb.checked = false);
-    
+
     // Clear all tagset shortcuts when selecting "None"
     const allTagsetCheckboxes = document.querySelectorAll('.tagset-checkbox');
     allTagsetCheckboxes.forEach(cb => cb.checked = false);
-    
+
     // Reset all tag checkboxes to unchecked state
     const allTagCheckboxes = document.querySelectorAll('.tag-checkbox');
     allTagCheckboxes.forEach(cb => setTagState(cb, 'unchecked'));
-    
+
     // Clear special filters when selecting None
     clearSimilarFilter();
     clearPortraitFilter();
     clearNon169Filter();
     clearRecentlyDisplayedFilter();
   }
-  
+
   updateTagFilterDisplay();
   filterAndRenderGallery();
 }
@@ -5895,31 +5918,31 @@ function updateTVShortcutStates() {
 
   // Update TV checkboxes
   const tvCheckboxes = document.querySelectorAll('.tv-checkbox');
-  
+
   tvCheckboxes.forEach(tvCheckbox => {
     const tvId = tvCheckbox.value;
     const tv = allTVs.find(t => (t.device_id || t.entity_id) === tvId);
-    
+
     if (!tv) {
       tvCheckbox.checked = false;
       tvCheckbox.indeterminate = false;
       return;
     }
-    
+
     const tvIncludeTags = (tv.tags || []).map(tag => tag.toLowerCase()).filter(tag => availableTagsSet.has(tag));
     const tvExcludeTags = (tv.exclude_tags || []).map(tag => tag.toLowerCase()).filter(tag => availableTagsSet.has(tag));
-    
+
     // EXACT match: same size AND same contents (bidirectional)
-    const includeMatch = 
+    const includeMatch =
       tvIncludeTags.length === includedTagsSet.size &&
       tvIncludeTags.every(tag => includedTagsSet.has(tag)) &&
       includedTags.every(tag => tvIncludeTags.includes(tag));
-    
-    const excludeMatch = 
+
+    const excludeMatch =
       tvExcludeTags.length === excludedTagsSet.size &&
       tvExcludeTags.every(tag => excludedTagsSet.has(tag)) &&
       excludedTags.every(tag => tvExcludeTags.includes(tag));
-    
+
     if (includeMatch && excludeMatch) {
       tvCheckbox.checked = true;
       tvCheckbox.indeterminate = false;
@@ -5931,30 +5954,30 @@ function updateTVShortcutStates() {
 
   // Update Tagset checkboxes
   const tagsetCheckboxes = document.querySelectorAll('.tagset-checkbox');
-  
+
   tagsetCheckboxes.forEach(tagsetCheckbox => {
     const tagsetName = tagsetCheckbox.value;
     const tagset = allGlobalTagsets?.[tagsetName];
-    
+
     if (!tagset) {
       tagsetCheckbox.checked = false;
       return;
     }
-    
+
     const tagsetIncludeTags = (tagset.tags || []).map(tag => tag.toLowerCase()).filter(tag => availableTagsSet.has(tag));
     const tagsetExcludeTags = (tagset.exclude_tags || []).map(tag => tag.toLowerCase()).filter(tag => availableTagsSet.has(tag));
-    
+
     // EXACT match: same size AND same contents (bidirectional)
-    const includeMatch = 
+    const includeMatch =
       tagsetIncludeTags.length === includedTagsSet.size &&
       tagsetIncludeTags.every(tag => includedTagsSet.has(tag)) &&
       includedTags.every(tag => tagsetIncludeTags.includes(tag));
-    
-    const excludeMatch = 
+
+    const excludeMatch =
       tagsetExcludeTags.length === excludedTagsSet.size &&
       tagsetExcludeTags.every(tag => excludedTagsSet.has(tag)) &&
       excludedTags.every(tag => tagsetExcludeTags.includes(tag));
-    
+
     if (includeMatch && excludeMatch) {
       tagsetCheckbox.checked = true;
     } else {
@@ -5970,7 +5993,7 @@ function updateTagFilterDisplay(skipRender = false) {
   const noneSelected = noneCheckbox && noneCheckbox.checked;
   const buttonText = document.getElementById('tag-filter-text');
   const clearBtn = document.getElementById('clear-tag-filter-btn');
-  
+
   let label = 'All Tags';
   let showClear = false;
 
@@ -6005,7 +6028,7 @@ function updateTagFilterDisplay(skipRender = false) {
   if (clearBtn) {
     clearBtn.style.display = showClear ? 'block' : 'none';
   }
-  
+
   // Only re-render gallery if explicitly requested (not during periodic count updates)
   if (!skipRender) {
     renderGallery();
@@ -6042,23 +6065,23 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
  * When an image is rotated by an arbitrary angle, the corners extend beyond
  * the original bounds. This function computes the largest rectangle that
  * fits entirely within the rotated image without showing any background.
- * 
+ *
  * @param {number} width - Original image width
- * @param {number} height - Original image height  
+ * @param {number} height - Original image height
  * @param {number} angleDegrees - Rotation angle in degrees
  * @returns {{ width: number, height: number, scale: number }} Inscribed dimensions and scale factor
  */
 function getInscribedDimensions(width, height, angleDegrees) {
   if (!width || !height) return { width: 0, height: 0, scale: 1 };
   if (Math.abs(angleDegrees) < 0.01) return { width, height, scale: 1 };
-  
+
   const angle = Math.abs(angleDegrees) * Math.PI / 180;
   const cosA = Math.cos(angle);
   const sinA = Math.sin(angle);
-  
+
   // For a W×H rectangle rotated by angle θ around its center,
   // the largest inscribed axis-aligned rectangle (same aspect ratio) is:
-  // 
+  //
   // The rotated corners extend beyond original bounds, creating black triangles.
   // The inscribed rectangle must avoid these corners.
   //
@@ -6069,7 +6092,7 @@ function getInscribedDimensions(width, height, angleDegrees) {
   // Correct formula for inscribed rectangle in rotated rectangle:
   const W = width;
   const H = height;
-  
+
   // The inscribed rectangle dimensions (maintaining original aspect ratio):
   // inscribed_W = W * cos(θ) - H * sin(θ)  -- but only works when positive
   // inscribed_H = H * cos(θ) - W * sin(θ)  -- but only works when positive
@@ -6078,16 +6101,16 @@ function getInscribedDimensions(width, height, angleDegrees) {
   // The scale factor for same-aspect-ratio inscribed rectangle is:
   const denom = cosA + sinA * Math.max(W/H, H/W);
   const scale = 1 / denom;
-  
+
   let inscribedWidth = width * scale;
   let inscribedHeight = height * scale;
-  
+
   // Ensure positive dimensions
   inscribedWidth = Math.max(1, Math.floor(inscribedWidth));
   inscribedHeight = Math.max(1, Math.floor(inscribedHeight));
-  
-  return { 
-    width: inscribedWidth, 
+
+  return {
+    width: inscribedWidth,
     height: inscribedHeight,
     scale: Math.max(0.1, scale)
   };
@@ -6100,7 +6123,7 @@ function getInscribedDimensions(width, height, angleDegrees) {
 function getEffectiveCropDimensions() {
   const { naturalWidth, naturalHeight, rotation } = editState;
   if (!naturalWidth || !naturalHeight) return { width: 0, height: 0, scale: 1 };
-  
+
   return getInscribedDimensions(naturalWidth, naturalHeight, rotation);
 }
 
@@ -6221,7 +6244,7 @@ function initImageEditor() {
 
   // Prevent text/image selection during crop interactions
   const preventSelection = (e) => e.preventDefault();
-  
+
   editControls.crop.box?.addEventListener('pointerdown', (event) => {
     if (!editState.active || editState.activeTool !== 'crop') return;
     // Only handle move if the target is the box itself, not a handle
@@ -6362,7 +6385,7 @@ function updateToolbarState() {
   const { editBtn, applyBtn, cancelBtn, toolButtons, previewToggleBtn, showTvBtn } = editControls.toolbar;
   const isActive = editState.active;
   const isMobile = window.innerWidth <= 768;
-  
+
   // Add class to toolbar for CSS styling
   const toolbar = document.getElementById('image-edit-toolbar');
   if (toolbar) {
@@ -6466,7 +6489,7 @@ function enterEditMode() {
     }
   }
   updateToolbarState();
-  
+
   // On mobile, auto-activate crop tool when entering edit mode
   const isMobile = window.innerWidth <= 768;
   if (isMobile && !editState.activeTool) {
@@ -6686,7 +6709,7 @@ function resetRotation() {
 function updateRotationUI() {
   if (!editControls?.rotation) return;
   const { slider, zeroBtn } = editControls.rotation;
-  
+
   if (slider) {
     slider.value = editState.rotation;
   }
@@ -6707,11 +6730,11 @@ function updateRotationUI() {
 
 function applyRotationPreview() {
   if (!editControls?.modalImage || !editControls?.stage) return;
-  
+
   const img = editControls.modalImage;
   const stage = editControls.stage;
   const rotation = editState.rotation || 0;
-  
+
   if (Math.abs(rotation) < 0.01) {
     // No rotation - reset transforms
     img.style.transform = '';
@@ -6721,7 +6744,7 @@ function applyRotationPreview() {
     img.style.transform = `rotate(${rotation}deg)`;
     stage.style.overflow = 'visible';
   }
-  
+
   // Constrain crop box to stay within the inscribed (valid) region
   constrainCropToInscribedRegion();
 }
@@ -6733,27 +6756,27 @@ function applyRotationPreview() {
  */
 function getValidCropRegion() {
   const rotation = editState.rotation || 0;
-  
+
   if (Math.abs(rotation) < 0.01) {
     // No rotation - entire image is valid
     return { minLeft: 0, minTop: 0, maxRight: 0, maxBottom: 0 };
   }
-  
+
   const { naturalWidth, naturalHeight } = editState;
   if (!naturalWidth || !naturalHeight) {
     return { minLeft: 0, minTop: 0, maxRight: 0, maxBottom: 0 };
   }
-  
+
   const inscribed = getInscribedDimensions(naturalWidth, naturalHeight, rotation);
-  
+
   // Calculate how much smaller the inscribed rectangle is as a ratio
   const widthRatio = inscribed.width / naturalWidth;
   const heightRatio = inscribed.height / naturalHeight;
-  
+
   // The inscribed rectangle is centered, so margins are equal on both sides
   const marginX = (1 - widthRatio) / 2 * 100;
   const marginY = (1 - heightRatio) / 2 * 100;
-  
+
   return {
     minLeft: marginX,
     minTop: marginY,
@@ -6765,7 +6788,7 @@ function getValidCropRegion() {
 /**
  * Constrain the current crop insets to stay within the valid inscribed region.
  * Called when rotation changes.
- * 
+ *
  * Crop insets represent how much is cut off each edge (0 = no crop, 50 = half cut).
  * When rotated, the minimum insets must be at least the inscribed bounds to avoid
  * showing black corners.
@@ -6773,10 +6796,10 @@ function getValidCropRegion() {
 function constrainCropToInscribedRegion() {
   const bounds = getValidCropRegion();
   const { crop } = editState;
-  
+
   let needsUpdate = false;
   const newCrop = { ...crop };
-  
+
   // Ensure crop insets are at least as large as the inscribed bounds
   // (crop.left < bounds.minLeft means the crop extends into black region)
   if (crop.left < bounds.minLeft) {
@@ -6795,7 +6818,7 @@ function constrainCropToInscribedRegion() {
     newCrop.bottom = bounds.maxBottom;
     needsUpdate = true;
   }
-  
+
   if (needsUpdate) {
     // Force immediate visual update
     editState.crop = newCrop;
@@ -7075,7 +7098,7 @@ function setCropInsets(insets, options = {}) {
 
 function clampInsets(insets) {
   let { top, right, bottom, left } = insets;
-  
+
   // Get rotation-based bounds (0 if no rotation)
   const bounds = getValidCropRegion();
 
@@ -7088,7 +7111,7 @@ function clampInsets(insets) {
   // Calculate max available dimensions within valid region
   const maxAvailableWidth = 100 - bounds.minLeft - bounds.maxRight;
   const maxAvailableHeight = 100 - bounds.minTop - bounds.maxBottom;
-  
+
   let width = 100 - left - right;
   if (width < MIN_CROP_PERCENT) {
     const shortfall = MIN_CROP_PERCENT - width;
@@ -7343,7 +7366,7 @@ function handleCropPointerMove(event) {
   const { type, handle, startX, startY, startInsets, bounds, aspectRatio } = cropInteraction;
   const dx = ((event.clientX - startX) / bounds.width) * 100;
   const dy = ((event.clientY - startY) / bounds.height) * 100;
-  
+
   // Get rotation-based bounds
   const validRegion = getValidCropRegion();
 
@@ -7365,7 +7388,7 @@ function handleCropPointerMove(event) {
   } else {
     let { top, right, bottom, left } = startInsets;
 
-    // For handle resizing: 
+    // For handle resizing:
     // - Min bound ensures we don't go into black region (validRegion.minXxx)
     // - Max bound ensures we keep minimum crop size
     if (handle.includes('w')) {
@@ -7403,7 +7426,7 @@ function handleCropPointerMove(event) {
 
 function handleCropPointerUp() {
   if (!cropInteraction) return;
-  
+
   // Release pointer capture
   if (cropInteraction.targetElement && cropInteraction.pointerId !== undefined) {
     try {
@@ -7412,7 +7435,7 @@ function handleCropPointerUp() {
       console.error('Failed to release pointer for crop interaction:', e);
     }
   }
-  
+
   editControls?.crop?.box?.classList.remove('dragging');
   document.removeEventListener('pointermove', handleCropPointerMove);
   document.removeEventListener('pointerup', handleCropPointerUp, { once: false });
@@ -7638,19 +7661,19 @@ function hasRealEdits() {
   // Check crop
   const { crop, adjustments, filter, rotation, cropPreset } = editState;
   const hasCrop = Object.values(crop).some(v => Math.abs(v) > 0.01);
-  
+
   // Check rotation
   const hasRotation = Math.abs(rotation || 0) > 0.01;
-  
+
   // Check adjustments
   const hasAdjustments = Object.values(adjustments).some(v => Math.abs(v) > 0.01);
-  
+
   // Check filter
   const hasFilter = filter && filter !== 'none';
-  
+
   // Check if 16:9SAM preset which forces resize
   const hasResizePreset = cropPreset === '16:9sam';
-  
+
   return hasCrop || hasRotation || hasAdjustments || hasFilter || hasResizePreset;
 }
 
@@ -7798,12 +7821,12 @@ function renderModalResolutionFromMetadata(imageData) {
     const is16x9 = Math.abs(aspectRatio - 1.78) < 0.05;
     const fileSize = imageData.fileSize || 0;
     const fileSizeMB = fileSize / (1024 * 1024);
-    
+
     // Check if image meets "sam" criteria: 3840x2160 and <= 20MB
     const isSam = width === 3840 && height === 2160 && fileSizeMB <= 20;
-    
+
     resolutionEl.textContent = `${width} × ${height}`;
-    
+
     let badgesHtml = '';
     if (isSam) {
       badgesHtml += '<span class="sam-badge-inline" title="Image resolution and size (<20MB) is correct target for Frame TVs">sam</span>';
@@ -7816,7 +7839,7 @@ function renderModalResolutionFromMetadata(imageData) {
     resolutionEl.textContent = 'Unknown';
     aspectBadgeEl.innerHTML = '';
   }
-  
+
   // Display file size
   if (fileSizeEl) {
     if (imageData?.fileSize) {
@@ -7878,15 +7901,15 @@ function initModal() {
   // Mobile modal tab switching
   const modalContent = modal.querySelector('.modal-content');
   const mobileTabs = modal.querySelectorAll('.mobile-modal-tab');
-  
+
   mobileTabs.forEach(tab => {
     tab.addEventListener('click', () => {
       const targetTab = tab.dataset.modalTab;
-      
+
       // Update active tab button
       mobileTabs.forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
-      
+
       // Update modal content data attribute to control visibility
       if (modalContent) {
         modalContent.dataset.mobileTab = targetTab;
@@ -7904,7 +7927,7 @@ function initModal() {
     mobileShowTvAction.className = 'btn-primary mobile-show-tv-action';
     mobileShowTvAction.textContent = 'Show on TV';
     modalActionsLeft.appendChild(mobileShowTvAction);
-    
+
     // Wire up click handler (same as mobile-show-tv-btn)
     mobileShowTvAction.addEventListener('click', () => {
       const mobileShowTvBtn = document.getElementById('mobile-show-tv-btn');
@@ -8001,7 +8024,7 @@ function showFullScreenImage(filename) {
     z-index: 10000;
     cursor: pointer;
   `;
-  
+
   // Create image element
   const img = document.createElement('img');
   img.src = `library/${filename}`;
@@ -8010,15 +8033,15 @@ function showFullScreenImage(filename) {
     max-height: 100%;
     object-fit: contain;
   `;
-  
+
   overlay.appendChild(img);
   document.body.appendChild(overlay);
-  
+
   // Click anywhere to close
   overlay.onclick = () => {
     document.body.removeChild(overlay);
   };
-  
+
   // ESC key to close
   const handleEsc = (e) => {
     if (e.key === 'Escape') {
@@ -8034,7 +8057,7 @@ function showFullScreenImage(filename) {
 function openImageModal(filename) {
   const modal = document.getElementById('image-modal');
   const imageData = allImages[filename];
-  
+
   currentImage = filename;
 
   if (!modal) {
@@ -8056,7 +8079,7 @@ function openImageModal(filename) {
   }
   document.getElementById('modal-filename').textContent = getDisplayName(filename);
   document.getElementById('modal-actual-filename').textContent = filename;
-  
+
   renderModalResolutionFromMetadata(imageData);
 
   // Set form values
@@ -8078,7 +8101,7 @@ function openImageModal(filename) {
   }
 
   selectFilter('none', { silent: true });
-  
+
   // Render tag badges and TV tags helper
   renderImageTagBadges(imageData.tags || []);
   renderTvTagsHelper();
@@ -8086,13 +8109,13 @@ function openImageModal(filename) {
   exitEditMode();
   const initialPreset = detectInitialCropPreset(imageData);
   resetEditState({ hasBackup: false, keepDimensions: false, silent: true, initialPreset });
-  
+
   // Load existing crop values if present
   if (imageData.crop && typeof imageData.crop === 'object') {
     const { top = 0, right = 0, bottom = 0, left = 0 } = imageData.crop;
     setCropInsets({ top, right, bottom, left }, { silent: true });
   }
-  
+
   clearToolbarStatus();
   updateToolbarState();
   updateCropOverlay();
@@ -8108,16 +8131,16 @@ function showEditFilenameForm() {
   const filenameContainer = document.querySelector('.modal-filename-container');
   const editForm = document.getElementById('edit-filename-form');
   const editInput = document.getElementById('edit-filename-input');
-  
+
   // Extract just the base name (without UUID and extension)
   // currentImage format: basename-uuid.ext
   const ext = currentImage.substring(currentImage.lastIndexOf('.'));
   const nameWithoutExt = currentImage.substring(0, currentImage.lastIndexOf('.'));
-  
+
   // Check if it has UUID pattern (dash followed by 8 hex chars at the end)
   const uuidPattern = /-[0-9a-f]{8}$/i;
   let baseName;
-  
+
   if (uuidPattern.test(nameWithoutExt)) {
     // Extract base name without UUID
     baseName = nameWithoutExt.substring(0, nameWithoutExt.lastIndexOf('-'));
@@ -8125,9 +8148,9 @@ function showEditFilenameForm() {
     // No UUID found, use the name without extension
     baseName = nameWithoutExt;
   }
-  
+
   editInput.value = baseName;
-  
+
   // Hide the h3 and show the form
   filenameContainer.style.display = 'none';
   editForm.style.display = 'flex';
@@ -8138,44 +8161,44 @@ function showEditFilenameForm() {
 function hideEditFilenameForm() {
   const filenameContainer = document.querySelector('.modal-filename-container');
   const editForm = document.getElementById('edit-filename-form');
-  
+
   filenameContainer.style.display = 'flex';
   editForm.style.display = 'none';
 }
 
 async function saveFilenameChange() {
   if (!currentImage) return;
-  
+
   const newBaseName = document.getElementById('edit-filename-input').value.trim();
-  
+
   if (!newBaseName) {
     alert('Please enter a valid name');
     return;
   }
-  
+
   try {
     const response = await fetch(`${API_BASE}/images/${encodeURIComponent(currentImage)}/rename`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ newBaseName })
     });
-    
+
     const result = await response.json();
-    
+
     if (result.success) {
       // Update current image reference
       currentImage = result.newFilename;
-      
+
       // Reload gallery and refresh modal
       await loadGallery();
-      
+
       // Update modal display
       document.getElementById('modal-filename').textContent = getDisplayName(result.newFilename);
       document.getElementById('modal-actual-filename').textContent = result.newFilename;
       document.getElementById('modal-image').src = `library/${result.newFilename}`;
-      
+
       hideEditFilenameForm();
-      
+
       // Update sync status since files changed
       await updateSyncStatus();
     } else {
@@ -8205,10 +8228,10 @@ async function saveImageChanges() {
     if (result.success && result.data) {
       // Update local cache with full response (includes updated timestamp)
       allImages[currentImage] = result.data;
-      
+
       // Don't reload gallery on every dropdown change - it causes visual jitter
       // Gallery will be reloaded when modal closes if there are changes
-      
+
       // Update sync status since metadata changed
       await updateSyncStatus();
     }
@@ -8236,17 +8259,17 @@ async function deleteImage() {
     if (result.success) {
       document.getElementById('image-modal').classList.remove('active');
       await loadGallery();
-      
+
       // Update sync status since file was deleted
       await updateSyncStatus();
-      
+
       // Refresh similar groups and filter count
       await fetchSimilarGroups();
       await loadTagsForFilter();
       if (similarFilterActive) {
         renderGallery();
       }
-      
+
       // Auto-sync after deletion (same as closing modal with changes)
       const status = await fetch(`${API_BASE}/sync/status`).then(r => r.json());
       if (status.success && status.status.hasChanges) {
@@ -8263,7 +8286,7 @@ async function deleteImage() {
 function initMetadataViewer() {
   const btn = document.getElementById('refresh-metadata-btn');
   btn.addEventListener('click', loadMetadata);
-  
+
   // Load metadata on initial page load
   loadMetadata();
 }
@@ -8275,7 +8298,7 @@ async function loadMetadata() {
   try {
     const response = await fetch(`${API_BASE}/metadata`);
     const metadata = await response.json();
-    
+
     // Pretty print the JSON with syntax highlighting
     contentDiv.textContent = JSON.stringify(metadata, null, 2);
   } catch (error) {
@@ -8289,7 +8312,7 @@ function initSyncDetail() {
   // Load initial data
   loadSyncStatus();
   loadSyncLogs();
-  
+
   // Set up conflict filter checkbox
   const problemsCheckbox = document.getElementById('show-problems-only');
   if (problemsCheckbox) {
@@ -8317,11 +8340,11 @@ async function loadSyncLogs() {
     }
 
     let logs = Array.isArray(data.logs) ? data.logs : [];
-    
+
     // Apply conflict filter if checkbox is checked
     const problemsCheckbox = document.getElementById('show-problems-only');
     const showProblemsOnly = problemsCheckbox && problemsCheckbox.checked;
-    
+
     if (showProblemsOnly) {
       logs = logs.filter(entry => {
         const status = (entry.status || '').toLowerCase();
@@ -8330,8 +8353,8 @@ async function loadSyncLogs() {
     }
 
     if (logs.length === 0) {
-      const emptyMessage = showProblemsOnly 
-        ? 'No sync problems found in history.' 
+      const emptyMessage = showProblemsOnly
+        ? 'No sync problems found in history.'
         : 'No sync history yet. Run a sync to see activity here.';
       container.innerHTML = `<div class="sync-log-empty">${emptyMessage}</div>`;
       container.dataset.loaded = 'true';
@@ -8524,7 +8547,7 @@ function escapeHtml(untrustedValue) {
 function mergeTagsCaseInsensitive(existingTags, newTags) {
   const result = [...existingTags];
   const lowerExisting = existingTags.map(t => t.toLowerCase());
-  
+
   for (const tag of newTags) {
     const lowerTag = tag.toLowerCase();
     if (!lowerExisting.includes(lowerTag)) {
@@ -8532,72 +8555,72 @@ function mergeTagsCaseInsensitive(existingTags, newTags) {
       lowerExisting.push(lowerTag);
     }
   }
-  
+
   return result;
 }
 
 async function loadSyncStatus() {
   const container = document.getElementById('git-status-container');
-  
+
   container.innerHTML = '<div class="loading-indicator">Loading git status...</div>';
 
   try {
     const response = await fetch(`${API_BASE}/sync/git-status`);
     const data = await response.json();
-    
+
     if (!data.success) {
       throw new Error(data.error);
     }
-    
+
     const status = data.gitStatus;
-    
+
     // Build status display
     let html = '<div class="git-status-container">';
-    
+
     // Status grid
     html += '<div class="git-status-grid">';
-    
+
     // Sync status
     html += '<div class="git-status-label">Sync Status:</div>';
     html += '<div class="git-status-value">';
     const uncommittedCount = (status.modified || []).length + (status.created || []).length + (status.deleted || []).length;
-    
+
     // Build badges
     let badges = '';
     let explanation = '';
-    
+
     if (status.ahead === 0 && status.behind === 0 && uncommittedCount === 0) {
       badges += '<span class="status-badge clean">✓ Clean</span>';
       explanation = '<span class="sync-explanation">Your local repository is fully synced with the cloud. All changes have been committed and pushed.</span>';
     } else {
       // Build explanation based on what's present
       let explanationParts = [];
-      
+
       if (status.ahead > 0) {
         badges += `<span class="status-badge ahead">↑ ${status.ahead} ahead</span>`;
         const commitWord = status.ahead === 1 ? 'commit' : 'commits';
         explanationParts.push(`${status.ahead} local ${commitWord} not pushed to cloud`);
       }
-      
+
       if (status.behind > 0) {
         badges += `<span class="status-badge behind">↓ ${status.behind} behind</span>`;
         const commitWord = status.behind === 1 ? 'commit' : 'commits';
         explanationParts.push(`${status.behind} cloud ${commitWord} not downloaded`);
       }
-      
+
       if (uncommittedCount > 0) {
         badges += '<span class="status-badge uncommitted">● Uncommitted</span>';
-        
+
         // Fetch detailed changes for metadata.json
         const modFiles = status.modified || [];
         let detailedDescription = '';
-        
+
         if (modFiles.includes('metadata.json')) {
           // Fetch detailed metadata changes
           try {
             const detailsResponse = await fetch(`${API_BASE}/sync/uncommitted-details`);
             const detailsData = await detailsResponse.json();
-            
+
             if (detailsData.success && detailsData.changes && detailsData.changes.length > 0) {
               // Format the changes as a readable list
               detailedDescription = detailsData.changes.join('; ');
@@ -8611,7 +8634,7 @@ async function loadSyncStatus() {
         } else {
           // For non-metadata files, list them
           let fileDetails = [];
-          
+
           if (modFiles.length > 0) {
             const fileNames = modFiles.map(f => f.split('/').pop()).join(', ');
             fileDetails.push(`modified: ${fileNames}`);
@@ -8626,28 +8649,28 @@ async function loadSyncStatus() {
             const fileNames = delFiles.map(f => f.split('/').pop()).join(', ');
             fileDetails.push(`deleted: ${fileNames}`);
           }
-          
+
           detailedDescription = fileDetails.join('; ');
         }
-        
+
         explanationParts.push(detailedDescription);
       }
-      
+
       if (status.hasConflicts) {
         badges += '<span class="status-badge conflict">⚠ Conflicts</span>';
         const conflictFiles = status.conflicted || [];
         const fileNames = conflictFiles.map(f => f.split('/').pop()).join(', ');
         explanationParts.push(`Merge conflicts in: ${fileNames}`);
       }
-      
+
       explanation = '<span class="sync-explanation">' + explanationParts.join('. ') + '.</span>';
     }
-    
+
     html += badges + ' ' + explanation;
     html += '</div>';
-    
+
     html += '</div>'; // Close git-status-grid
-    
+
     // Recent commits - scrollable list (completely outside the grid)
     if (status.recentCommits && status.recentCommits.length > 0) {
       html += '<div style="margin-top:20px; display:block; clear:both;"><strong>Recent Commits:</strong>';
@@ -8674,11 +8697,11 @@ async function loadSyncStatus() {
       });
       html += '</ul></div></div>';
     }
-    
+
     html += '</div>'; // Close git-status-container
-    
+
     container.innerHTML = html;
-    
+
   } catch (error) {
     console.error('Error loading sync status:', error);
     container.innerHTML = `<div class="error">Error loading status: ${error.message}</div>`;
@@ -8714,9 +8737,9 @@ function initBulkActions() {
   const addTagsBtn = document.getElementById('add-bulk-tags-btn');
   const cancelBtn = document.getElementById('cancel-bulk-tags-btn');
   const closeBtn = document.getElementById('bulk-modal-close');
-  
+
   console.log('initBulkActions - bulkTagBtn:', bulkTagBtn);
-  
+
   if (bulkTagBtn) {
     bulkTagBtn.addEventListener('click', openBulkTagModal);
   }
@@ -8738,7 +8761,7 @@ function initBulkActions() {
   if (closeBtn) {
     closeBtn.addEventListener('click', closeBulkTagModal);
   }
-  
+
   // Add Enter key support to bulk tags input
   const bulkTagsInput = document.getElementById('bulk-tags-input');
   if (bulkTagsInput) {
@@ -8749,7 +8772,7 @@ function initBulkActions() {
       }
     });
   }
-  
+
   // Close modal on outside click
   const modal = document.getElementById('bulk-tag-modal');
   if (modal) {
@@ -8764,22 +8787,22 @@ function initBulkActions() {
 async function deleteBulkImages() {
   const count = selectedImages.size;
   const plural = count !== 1 ? 's' : '';
-  
+
   if (!confirm(`Are you sure you want to delete ${count} image${plural}? This cannot be undone.`)) {
     return;
   }
-  
+
   const selectedArray = Array.from(selectedImages);
   let successCount = 0;
   let errorCount = 0;
-  
+
   // Delete each selected image
   for (const filename of selectedArray) {
     try {
       const response = await fetch(`${API_BASE}/images/${encodeURIComponent(filename)}`, {
         method: 'DELETE'
       });
-      
+
       const result = await response.json();
       if (result.success) {
         successCount++;
@@ -8791,26 +8814,26 @@ async function deleteBulkImages() {
       errorCount++;
     }
   }
-  
+
   // Show result
   if (errorCount > 0) {
     alert(`Deleted ${successCount} image${successCount !== 1 ? 's' : ''}. ${errorCount} failed.`);
   }
-  
+
   // Clear selection and refresh gallery
   clearSelection();
   await loadGallery();
-  
+
   // Update sync status since files were deleted
   await updateSyncStatus();
-  
+
   // Refresh similar groups and filter count
   await fetchSimilarGroups();
   await loadTagsForFilter();
   if (similarFilterActive) {
     renderGallery();
   }
-  
+
   // Auto-sync after deletion if there are changes
   const status = await fetch(`${API_BASE}/sync/status`).then(r => r.json());
   if (status.success && status.status.hasChanges) {
@@ -8831,18 +8854,18 @@ function initTvModal() {
 
   const handleShowTvClick = async () => {
     if (!currentImage) return;
-    
+
     tvModal.classList.add('active');
     tvListContainer.innerHTML = '<div class="loading-indicator">Loading TVs...</div>';
     if (logContainer) {
       logContainer.style.display = 'none';
       logContainer.textContent = '';
     }
-    
+
     try {
       const response = await fetch(`${API_BASE}/ha/tvs`);
       const data = await response.json();
-      
+
       if (data.success && Array.isArray(data.tvs)) {
         renderTvList(data.tvs);
       } else {
@@ -8865,7 +8888,7 @@ function initTvModal() {
   };
 
   closeBtn?.addEventListener('click', closeModal);
-  
+
   window.addEventListener('click', (event) => {
     if (event.target === tvModal) {
       closeModal();
@@ -8887,10 +8910,10 @@ function renderTvList(tvs) {
     const idType = tv.device_id ? 'device_id' : 'entity_id';
     // Escape ID for use in onclick and selector
     const safeId = id.replace(/['"\\]/g, '');
-    
+
     // Only add border if not the last item
     const borderStyle = index === tvs.length - 1 ? '' : 'border-bottom: 1px solid #eee;';
-    
+
     return `
     <div class="tv-item" onclick="displayOnTv('${safeId}', '${idType}')" style="display: flex; align-items: center; padding: 15px; ${borderStyle} cursor: pointer; transition: background 0.2s;">
       <div class="tv-info" style="flex: 1;">
@@ -8899,7 +8922,7 @@ function renderTvList(tvs) {
       <button class="btn-primary btn-small" id="btn-${safeId}">Show</button>
     </div>
   `}).join('');
-  
+
   // Add hover effect via JS since we're using inline styles for speed
   const items = container.querySelectorAll('.tv-item');
   items.forEach(item => {
@@ -8911,12 +8934,12 @@ function renderTvList(tvs) {
 // Make displayOnTv globally available since it's called from onclick
 window.displayOnTv = async function(id, type) {
   if (!currentImage) return;
-  
+
   const tvModal = document.getElementById('tv-select-modal');
   const safeId = id.replace(/['"\\]/g, '');
   const btn = document.getElementById(`btn-${safeId}`);
   const logContainer = document.getElementById('tv-upload-logs');
-  
+
   // Prevent double-clicks if button is already disabled
   if (btn && btn.disabled) return;
 
@@ -8926,7 +8949,7 @@ window.displayOnTv = async function(id, type) {
     btn.textContent = 'Sending...';
     btn.disabled = true;
   }
-  
+
   // UX: Create a local "Initializing" log line immediately so the user sees instant feedback.
   // We format it to match the backend log style ([HH:MM:SS] Message) so it looks seamless
   // when the real logs are appended below it later.
@@ -8946,7 +8969,7 @@ window.displayOnTv = async function(id, type) {
         // This prevents the "Initializing..." message from disappearing when the first
         // real log arrives, creating a smooth, continuous log history for the user.
         const fullLogs = remoteLogs ? `${initMsg}\n${remoteLogs}` : initMsg;
-        
+
         if (logContainer.textContent !== fullLogs) {
           logContainer.textContent = fullLogs;
           logContainer.scrollTop = logContainer.scrollHeight;
@@ -8962,7 +8985,7 @@ window.displayOnTv = async function(id, type) {
   if (logContainer) {
     logContainer.style.display = 'block';
     logContainer.textContent = initMsg;
-    
+
     // UX: Wait 1s before first poll to allow backend to clear the log file.
     // If we poll immediately, we might fetch the logs from the *previous* run
     // before the backend has a chance to truncate the file, causing a confusing flash of old data.
@@ -8977,15 +9000,15 @@ window.displayOnTv = async function(id, type) {
     // Add matte and filter if selected in the modal
     const matteSelect = document.getElementById('modal-matte');
     const filterSelect = document.getElementById('modal-filter');
-    
+
     if (matteSelect && matteSelect.value && matteSelect.value !== 'none') {
       payload.matte = matteSelect.value;
     }
-    
+
     if (filterSelect && filterSelect.value && filterSelect.value !== 'None') {
       payload.filter = filterSelect.value;
     }
-    
+
     if (type === 'device_id') {
       payload.device_id = id;
     } else {
@@ -8997,12 +9020,12 @@ window.displayOnTv = async function(id, type) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    
+
     const result = await response.json();
-    
+
     // Stop polling
     if (pollInterval) clearInterval(pollInterval);
-    
+
     // Fetch logs one last time to ensure we see the final message
     await pollLogs();
 
@@ -9014,12 +9037,12 @@ window.displayOnTv = async function(id, type) {
 
     if (result.success) {
       if (btn) btn.textContent = 'Sent!';
-      
+
       // Refresh TV status to update bubbles with new image
       // Need both: loadTVs() for screen state, fetchRecentlyDisplayed() for current image
       loadTVs();
       fetchRecentlyDisplayed();
-      
+
       // Close modal after short delay
       setTimeout(() => {
         tvModal.classList.remove('active');
@@ -9112,16 +9135,16 @@ async function loadAnalytics(selectedImage = null) {
   const emptyState = document.getElementById('analytics-empty-state');
   const errorState = document.getElementById('analytics-error-state');
   const content = document.getElementById('analytics-content');
-  
+
   // Hide states, show loading
   if (emptyState) emptyState.style.display = 'none';
   if (errorState) errorState.style.display = 'none';
   if (content) content.style.display = 'none';
-  
+
   // Show loading in summary
   const tvSummaryList = document.getElementById('analytics-tv-summary-list');
   if (tvSummaryList) tvSummaryList.innerHTML = '<div class="loading-indicator">Loading analytics...</div>';
-  
+
   try {
     // Ensure gallery data is loaded (needed for histogram)
     if (!galleryHasLoadedAtLeastOnce) {
@@ -9129,10 +9152,10 @@ async function loadAnalytics(selectedImage = null) {
       allImages = await galleryResponse.json();
       galleryHasLoadedAtLeastOnce = true;
     }
-    
+
     const response = await fetch(`${API_BASE}/analytics/summary`);
     const result = await response.json();
-    
+
     if (!result.success) {
       if (result.reason === 'no_data') {
         // Show empty state
@@ -9141,9 +9164,9 @@ async function loadAnalytics(selectedImage = null) {
       }
       throw new Error(result.message || 'Failed to load analytics');
     }
-    
+
     analyticsData = result.data;
-    
+
     // Build global TV color map for consistent colors across all views
     // Sort TVs by total display time descending for consistent ordering
     const tvIds = Object.keys(analyticsData.tvs || {});
@@ -9152,7 +9175,7 @@ async function loadAnalytics(selectedImage = null) {
     tvIds.forEach((tvId, index) => {
       globalTvColorMap[tvId] = CHART_COLORS[index % CHART_COLORS.length];
     });
-    
+
     // Check if logging is disabled
     if (analyticsData.logging_enabled === false) {
       if (emptyState) {
@@ -9162,15 +9185,15 @@ async function loadAnalytics(selectedImage = null) {
       }
       return;
     }
-    
+
     // Ensure TVs/tagsets are loaded for the tag selector
     if (!allTVs || allTVs.length === 0 || Object.keys(allGlobalTagsets || {}).length === 0) {
       await loadTVs();
     }
-    
+
     // Show content
     if (content) content.style.display = 'block';
-    
+
     // Render all sections
     renderAnalyticsSummary();
     renderOverallPieChart();
@@ -9178,7 +9201,7 @@ async function loadAnalytics(selectedImage = null) {
     renderTagSelector();
     renderImageSelector();
     setupAnalyticsEventListeners();
-    
+
     // If an image was specified, try to select it
     if (selectedImage) {
       // On mobile, switch to the Images tab
@@ -9190,14 +9213,14 @@ async function loadAnalytics(selectedImage = null) {
           btn.classList.toggle('active', btn.dataset.column === 'images');
         });
       }
-      
+
       // Try to select the image in the dropdown
       const imageSelect = document.getElementById('analytics-image-select');
       if (imageSelect) {
         // Check if the exact filename exists as an option
         const options = Array.from(imageSelect.options);
         const exactMatch = options.find(opt => opt.value === selectedImage);
-        
+
         if (exactMatch) {
           imageSelect.value = selectedImage;
           imageSelect.dispatchEvent(new Event('change'));
@@ -9212,7 +9235,7 @@ async function loadAnalytics(selectedImage = null) {
         }
       }
     }
-    
+
   } catch (error) {
     console.error('Error loading analytics:', error);
     if (errorState) {
@@ -9225,28 +9248,28 @@ async function loadAnalytics(selectedImage = null) {
 
 function renderAnalyticsSummary() {
   if (!analyticsData) return;
-  
+
   const imageCount = Object.keys(analyticsData.images || {}).length;
-  
+
   // Update image count
   const imagesEl = document.getElementById('analytics-total-images');
   if (imagesEl) imagesEl.textContent = imageCount;
-  
+
   // Render TV summary list
   const tvSummaryList = document.getElementById('analytics-tv-summary-list');
   if (!tvSummaryList) return;
-  
+
   const tvs = analyticsData.tvs || {};
   const tvIds = Object.keys(tvs);
-  
+
   if (tvIds.length === 0) {
     tvSummaryList.innerHTML = '<div class="empty-state-small">No TV data</div>';
     return;
   }
-  
+
   // Sort by display time descending
   tvIds.sort((a, b) => (tvs[b].total_display_seconds || 0) - (tvs[a].total_display_seconds || 0));
-  
+
   tvSummaryList.innerHTML = tvIds.map(tvId => {
     const tv = tvs[tvId];
     const hours = formatHoursNice(tv.total_display_seconds || 0);
@@ -9272,15 +9295,15 @@ function renderOverallPieChart() {
   const statsContainer = document.getElementById('analytics-distribution-stats');
   const detailContainer = document.getElementById('analytics-bucket-detail');
   if (!container) return;
-  
+
   const analyticsImages = analyticsData?.images || {};
   const galleryImageNames = Object.keys(allImages || {});
-  
+
   // Calculate time-filtered display seconds for each image
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   // Helper to calculate display seconds and count within the time range for an image
   function getImageStatsInRange(imageData) {
     if (!imageData?.display_periods) return { seconds: 0, count: 0 };
@@ -9298,7 +9321,7 @@ function renderOverallPieChart() {
     }
     return { seconds, count };
   }
-  
+
   // Merge gallery images with analytics data - include ALL images from gallery
   // Images not in analytics get 0 seconds, others get time-filtered seconds
   // Note: We only include images that exist in the gallery. Deleted images that
@@ -9311,29 +9334,29 @@ function renderOverallPieChart() {
       displayCount: stats.count
     };
   });
-  
+
   if (mergedImages.length === 0) {
     container.innerHTML = '<div class="empty-state-small">No image data</div>';
     if (statsContainer) statsContainer.innerHTML = '';
     if (detailContainer) detailContainer.innerHTML = '';
     return;
   }
-  
+
   // Sort by display time descending
   const imageList = mergedImages.sort((a, b) => b.seconds - a.seconds);
-  
+
   const totalSeconds = imageList.reduce((sum, img) => sum + img.seconds, 0);
-  
+
   // Calculate stats
   const count = imageList.length;
   const avgSeconds = count > 0 ? totalSeconds / count : 0;
   const sortedByTime = [...imageList].sort((a, b) => a.seconds - b.seconds);
-  const medianSeconds = count === 0 ? 0 : (count % 2 === 0 
+  const medianSeconds = count === 0 ? 0 : (count % 2 === 0
     ? (sortedByTime[count/2 - 1].seconds + sortedByTime[count/2].seconds) / 2
     : sortedByTime[Math.floor(count/2)].seconds);
   const minSeconds = sortedByTime[0]?.seconds || 0;
   const maxSeconds = sortedByTime[count - 1]?.seconds || 0;
-  
+
   // Render stats line
   if (statsContainer) {
     statsContainer.innerHTML = `
@@ -9349,7 +9372,7 @@ function renderOverallPieChart() {
       </span>
     `;
   }
-  
+
   // Define histogram buckets (in seconds)
   histogramBuckets = [
     { min: 0, max: 0, label: '0m', images: [] },
@@ -9362,7 +9385,7 @@ function renderOverallPieChart() {
     { min: 24 * 60 * 60, max: 48 * 60 * 60, label: '1-2d', images: [] },
     { min: 48 * 60 * 60, max: Infinity, label: '2d+', images: [] }
   ];
-  
+
   // Distribute images into buckets
   imageList.forEach(img => {
     for (const bucket of histogramBuckets) {
@@ -9377,11 +9400,11 @@ function renderOverallPieChart() {
       }
     }
   });
-  
+
   // Find max bucket count for scaling
   const maxBucketCount = Math.max(...histogramBuckets.map(b => b.images.length), 1);
   const maxBarHeight = 90; // pixels
-  
+
   // Build histogram bars
   const barsHtml = histogramBuckets.map((bucket, index) => {
     const heightPx = Math.max((bucket.images.length / maxBucketCount) * maxBarHeight, bucket.images.length > 0 ? 18 : 0);
@@ -9389,14 +9412,14 @@ function renderOverallPieChart() {
     const hasImages = bucket.images.length > 0;
     const isSelected = index === selectedBucketIndex;
     const bucketClass = `histogram-bar ${isZeroBucket && hasImages ? 'zero-bucket' : ''} ${hasImages ? 'clickable' : ''} ${isSelected ? 'selected' : ''}`;
-    
+
     // Only show bar if bucket has images
     const barInnerHtml = hasImages ? `
       <div class="histogram-bar-inner" style="height: ${heightPx}px">
         <span class="histogram-count">${bucket.images.length}</span>
       </div>
     ` : '';
-    
+
     return `
       <div class="${bucketClass}" data-bucket-index="${index}">
         ${barInnerHtml}
@@ -9404,17 +9427,17 @@ function renderOverallPieChart() {
       </div>
     `;
   }).join('');
-  
+
   container.innerHTML = `
     <div class="histogram-chart">
       <div class="histogram-bars">${barsHtml}</div>
     </div>
   `;
-  
+
   // Clear detail container
   if (detailContainer) detailContainer.innerHTML = '';
   selectedBucketIndex = -1;
-  
+
   // Add click handlers for histogram bars
   container.querySelectorAll('.histogram-bar.clickable').forEach(bar => {
     bar.addEventListener('click', () => {
@@ -9448,7 +9471,7 @@ function toggleBucketDetail(bucketIndex) {
   const container = document.getElementById('analytics-image-pie');
   const detailContainer = document.getElementById('analytics-bucket-detail');
   if (!detailContainer) return;
-  
+
   // If clicking the same bucket, collapse it
   if (selectedBucketIndex === bucketIndex) {
     selectedBucketIndex = -1;
@@ -9457,18 +9480,18 @@ function toggleBucketDetail(bucketIndex) {
     container.querySelectorAll('.histogram-bar').forEach(bar => bar.classList.remove('selected'));
     return;
   }
-  
+
   selectedBucketIndex = bucketIndex;
-  
+
   // Update selected state on bars
   container.querySelectorAll('.histogram-bar').forEach(bar => {
     bar.classList.toggle('selected', parseInt(bar.dataset.bucketIndex) === bucketIndex);
   });
-  
+
   // Reset sort to default when opening new bucket
   bucketSortColumn = 'time';
   bucketSortAsc = true;
-  
+
   renderBucketDetailTable();
 }
 
@@ -9476,13 +9499,13 @@ function toggleBucketDetail(bucketIndex) {
 function renderBucketDetailTable() {
   const detailContainer = document.getElementById('analytics-bucket-detail');
   if (!detailContainer || selectedBucketIndex < 0) return;
-  
+
   const bucket = histogramBuckets[selectedBucketIndex];
   if (!bucket || bucket.images.length === 0) {
     detailContainer.innerHTML = '';
     return;
   }
-  
+
   // Sort images based on current sort column and direction
   const sortedImages = [...bucket.images].sort((a, b) => {
     let cmp = 0;
@@ -9501,12 +9524,12 @@ function renderBucketDetailTable() {
     }
     return cmp;
   });
-  
+
   // Build table rows
   const rows = sortedImages.map(img => {
     const imageData = allImages[img.name] || {};
     const tags = imageData.tags || [];
-    const tagsHtml = tags.length > 0 
+    const tagsHtml = tags.length > 0
       ? tags.map(t => escapeHtml(t)).join(', ')
       : '<span class="bucket-tag untagged">(untagged)</span>';
     const displayTime = formatHoursNice(img.seconds);
@@ -9521,11 +9544,11 @@ function renderBucketDetailTable() {
     // Mobile-friendly format: m/d/yy (Xd)
     const uploadDisplay = imageData.added ? `${addedDateShort} (${daysAgo})` : '—';
     const displayName = getAnalyticsDisplayName(img.name);
-    
+
     // Use current metadata for filter/matte, fallback to display history for deleted images
     let currentFilter = imageData.filter;
     let currentMatte = imageData.matte;
-    
+
     // Fallback to display history if image not in gallery (deleted)
     if (!currentFilter && !currentMatte) {
       const imgAnalytics = analyticsData?.images?.[img.name];
@@ -9539,7 +9562,7 @@ function renderBucketDetailTable() {
       }
     }
     const filterMatteSuffix = formatFilterMatteSuffix(currentFilter, currentMatte);
-    
+
     return `
       <div class="bucket-row" data-filename="${escapeHtml(img.name)}">
         <span class="bucket-time${isZeroTime ? ' zero' : ''}">${displayTime}</span>
@@ -9550,10 +9573,10 @@ function renderBucketDetailTable() {
       </div>
     `;
   }).join('');
-  
+
   const timeArrow = bucketSortColumn === 'time' ? (bucketSortAsc ? ' ▲' : ' ▼') : '';
   const countArrow = bucketSortColumn === 'count' ? (bucketSortAsc ? ' ▲' : ' ▼') : '';
-  
+
   detailContainer.innerHTML = `
     <div class="bucket-table-wrapper">
       <div class="bucket-table-header">
@@ -9568,7 +9591,7 @@ function renderBucketDetailTable() {
       </div>
     </div>
   `;
-  
+
   // Add click handlers for sortable headers
   detailContainer.querySelectorAll('.bucket-table-header .sortable').forEach(header => {
     header.addEventListener('click', () => {
@@ -9582,13 +9605,13 @@ function renderBucketDetailTable() {
       renderBucketDetailTable();
     });
   });
-  
+
   // Add click handlers for rows (select image in 3rd column, or open modal on mobile)
   detailContainer.querySelectorAll('.bucket-row').forEach(row => {
     row.addEventListener('click', (e) => {
       // Don't handle if clicking the open button
       if (e.target.classList.contains('bucket-open-btn')) return;
-      
+
       const filename = row.dataset.filename;
       if (filename) {
         // On mobile, open the image modal directly
@@ -9603,7 +9626,7 @@ function renderBucketDetailTable() {
       }
     });
   });
-  
+
   // Add click handlers for open buttons (desktop only, hidden on mobile)
   detailContainer.querySelectorAll('.bucket-open-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -9618,18 +9641,18 @@ function renderBucketDetailTable() {
 function renderTVSelector() {
   const select = document.getElementById('analytics-tv-select');
   if (!select || !analyticsData) return;
-  
+
   const tvs = analyticsData.tvs || {};
   const tvIds = Object.keys(tvs);
-  
+
   // Sort by display time descending
   tvIds.sort((a, b) => (tvs[b].total_display_seconds || 0) - (tvs[a].total_display_seconds || 0));
-  
+
   select.innerHTML = tvIds.map(tvId => {
       const tv = tvs[tvId];
       return `<option value="${escapeHtml(tvId)}">${escapeHtml(tv.name || 'Unknown TV')}</option>`;
     }).join('');
-  
+
   // Auto-select first TV
   if (tvIds.length > 0) {
     selectedTv = tvIds[0];
@@ -9642,26 +9665,26 @@ function renderTVDetail(tvId) {
   const container = document.getElementById('analytics-tv-detail');
   const statsContainer = document.getElementById('analytics-tv-stats');
   if (!container || !analyticsData) return;
-  
+
   if (!tvId) {
     container.innerHTML = '<div class="empty-state-small">Select a TV to view details</div>';
     if (statsContainer) statsContainer.innerHTML = '';
     return;
   }
-  
+
   const tvData = analyticsData.tvs?.[tvId];
   if (!tvData) {
     container.innerHTML = '<div class="empty-state-small">TV not found in analytics data</div>';
     if (statsContainer) statsContainer.innerHTML = '';
     return;
   }
-  
+
   // Get time-filtered data for this TV
   const perImage = getTopImagesForTVInRange(tvId);
-  
+
   // Calculate stats for selected time range
   const tvStats = calculateTVStatsForRange(tvId);
-  
+
   // Render stats in header area
   if (statsContainer) {
     statsContainer.innerHTML = `
@@ -9672,17 +9695,17 @@ function renderTVDetail(tvId) {
       </div>
     `;
   }
-  
+
   let html = '';
-  
+
   // Activity timeline (when TV was displaying vs not)
   html += renderTVActivityTimeline(tvId);
-  
+
   // Event log for this TV
   html += renderTVEventLog(tvId);
-  
+
   container.innerHTML = html;
-  
+
   // Add click handlers for event log rows
   container.querySelectorAll('.event-log-row.clickable').forEach(row => {
     row.addEventListener('click', () => {
@@ -9695,7 +9718,7 @@ function renderTVDetail(tvId) {
 // Generate timeline axis with edge labels and tick marks based on time range
 function generateTimelineAxis(rangeStart, rangeMs, isCompact = false) {
   const now = Date.now();
-  
+
   // Determine tick interval based on selected time range
   const tickConfig = {
     '1h': { interval: 15 * 60 * 1000, format: { hour: 'numeric', minute: '2-digit' } },           // 15 min
@@ -9705,13 +9728,13 @@ function generateTimelineAxis(rangeStart, rangeMs, isCompact = false) {
     '1mo': { interval: 7 * 24 * 60 * 60 * 1000, format: { month: 'short', day: 'numeric' } },     // 1 week
     '6mo': { interval: 30 * 24 * 60 * 60 * 1000, format: { month: 'short' } }                     // 1 month
   };
-  
+
   const config = tickConfig[selectedTimeRange] || tickConfig['1w'];
-  
+
   // Generate tick marks
   const ticks = [];
   let tickTime = Math.ceil(rangeStart / config.interval) * config.interval; // Start at first clean interval
-  
+
   while (tickTime < now) {
     const pct = ((tickTime - rangeStart) / rangeMs) * 100;
     if (pct > 5 && pct < 95) { // Avoid ticks too close to edges
@@ -9720,30 +9743,30 @@ function generateTimelineAxis(rangeStart, rangeMs, isCompact = false) {
     }
     tickTime += config.interval;
   }
-  
+
   // Edge labels
   const startDate = new Date(rangeStart);
-  const startFormat = (selectedTimeRange === '1h' || selectedTimeRange === '12h' || selectedTimeRange === '1d') 
+  const startFormat = (selectedTimeRange === '1h' || selectedTimeRange === '12h' || selectedTimeRange === '1d')
     ? { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }
     : { month: 'short', day: 'numeric' };
   const startLabel = startDate.toLocaleString(undefined, startFormat);
-  
+
   // Build tick marks HTML
-  const tickMarks = ticks.map(t => 
+  const tickMarks = ticks.map(t =>
     `<div class="timeline-tick" style="left: ${t.pct}%"><span class="timeline-tick-label">${t.label}</span></div>`
   ).join('');
-  
+
   // Edge labels HTML (above track)
   const edgesHtml = `<div class="timeline-edges"><span>${startLabel}</span><span>Now</span></div>`;
-  
+
   // Ticks HTML (below track)
   const ticksHtml = tickMarks ? `<div class="timeline-ticks">${tickMarks}</div>` : '';
-  
+
   // For compact (inline) timelines, just return edges
   if (isCompact) {
     return { edges: edgesHtml, ticks: '' };
   }
-  
+
   return { edges: edgesHtml, ticks: ticksHtml };
 }
 
@@ -9751,29 +9774,29 @@ function generateTimelineAxis(rangeStart, rangeMs, isCompact = false) {
 function renderTVActivityTimeline(tvId) {
   const tvData = analyticsData?.tvs?.[tvId];
   if (!tvData) return '';
-  
+
   // Collect all display periods from all images for this TV (with image names)
   const allPeriods = [];
   const images = analyticsData.images || {};
-  
+
   for (const [filename, imageData] of Object.entries(images)) {
     const periods = imageData.display_periods?.[tvId] || [];
     for (const period of periods) {
       allPeriods.push({ start: period.start, end: period.end, filename });
     }
   }
-  
+
   if (allPeriods.length === 0) {
     return '<div class="tv-timeline"><div class="inline-timeline-empty">No timeline data available</div></div>';
   }
-  
+
   // Sort by start time
   allPeriods.sort((a, b) => a.start - b.start);
-  
+
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   // Build timeline segments with tooltips showing image name and time
   const segments = allPeriods
     .filter(p => p.end > rangeStart)
@@ -9788,10 +9811,10 @@ function renderTVActivityTimeline(tvId) {
       return `<div class="tv-timeline-segment" style="left: ${leftPct}%; width: ${widthPct}%" title="${escapeHtml(tooltip)}"></div>`;
     })
     .join('');
-  
+
   // Generate axis parts (edges above, ticks below)
   const axis = generateTimelineAxis(rangeStart, rangeMs, false);
-  
+
   return `
     <div class="tv-timeline">
       ${axis.edges}
@@ -9805,13 +9828,13 @@ function renderTVActivityTimeline(tvId) {
 function renderTVEventLog(tvId) {
   const images = analyticsData?.images || {};
   const tvName = analyticsData?.tvs?.[tvId]?.name || 'Unknown TV';
-  
+
   // Collect all events for this TV
   const allEvents = [];
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   for (const [filename, imageData] of Object.entries(images)) {
     const periods = imageData.display_periods?.[tvId] || [];
     for (const period of periods) {
@@ -9827,14 +9850,14 @@ function renderTVEventLog(tvId) {
       }
     }
   }
-  
+
   if (allEvents.length === 0) {
     return '<div class="event-log"><div class="event-log-title">Display Events</div><div class="event-log-empty">No events in selected time range</div></div>';
   }
-  
+
   // Sort by start time descending
   allEvents.sort((a, b) => b.start - a.start);
-  
+
   const eventRows = allEvents.map(evt => {
     const startDate = new Date(evt.start);
     // duration is in ms, convert to seconds for formatHoursNice
@@ -9843,7 +9866,7 @@ function renderTVEventLog(tvId) {
     const timeStr = startDate.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
     const imageName = truncateFilename(evt.filename, 18);
     const filterMatteSuffix = formatFilterMatteSuffix(evt.photo_filter, evt.matte);
-    
+
     return `
       <div class="event-log-row clickable" data-filename="${escapeHtml(evt.filename)}">
         <span class="event-log-date">${dateStr}</span>
@@ -9853,7 +9876,7 @@ function renderTVEventLog(tvId) {
       </div>
     `;
   }).join('');
-  
+
   return `
     <div class="event-log">
       <div class="event-log-title">Display Events (${allEvents.length})</div>
@@ -9874,12 +9897,12 @@ function renderPieChart(tags, tvId) {
   if (!tags || tags.length === 0) {
     return '<div class="empty-state-small" style="padding: 10px;">No tag data</div>';
   }
-  
+
   // Take top 5 tags, combine rest into "other"
   const sortedTags = [...tags].sort((a, b) => (b.seconds || 0) - (a.seconds || 0));
   const topTags = sortedTags.slice(0, 5);
   const otherSeconds = sortedTags.slice(5).reduce((sum, t) => sum + (t.seconds || 0), 0);
-  
+
   if (otherSeconds > 0) {
     const totalSeconds = sortedTags.reduce((sum, t) => sum + (t.seconds || 0), 0);
     topTags.push({
@@ -9888,35 +9911,35 @@ function renderPieChart(tags, tvId) {
       share: (otherSeconds / totalSeconds) * 100
     });
   }
-  
+
   // Build conic gradient
   let gradientStops = [];
   let currentPct = 0;
-  
+
   topTags.forEach((tag, index) => {
     const pct = tag.share || 0;
-    const color = tag.tag === '<none>' || tag.tag === 'other' 
-      ? CHART_COLORS[7] 
+    const color = tag.tag === '<none>' || tag.tag === 'other'
+      ? CHART_COLORS[7]
       : CHART_COLORS[index % (CHART_COLORS.length - 1)];
-    
+
     gradientStops.push(`${color} ${currentPct}% ${currentPct + pct}%`);
     currentPct += pct;
   });
-  
+
   // Fill remaining to 100% if needed
   if (currentPct < 100) {
     gradientStops.push(`#e9ecef ${currentPct}% 100%`);
   }
-  
+
   const gradient = `conic-gradient(${gradientStops.join(', ')})`;
-  
+
   // Build legend
   const legendItems = topTags.map((tag, index) => {
-    const color = tag.tag === '<none>' || tag.tag === 'other' 
-      ? CHART_COLORS[7] 
+    const color = tag.tag === '<none>' || tag.tag === 'other'
+      ? CHART_COLORS[7]
       : CHART_COLORS[index % (CHART_COLORS.length - 1)];
     const displayTag = tag.tag === '<none>' ? '(untagged)' : tag.tag;
-    
+
     return `
       <div class="pie-legend-item" data-tag="${escapeHtml(tag.tag)}" title="Click to view tag details">
         <span class="pie-legend-color" style="background: ${color}"></span>
@@ -9925,7 +9948,7 @@ function renderPieChart(tags, tvId) {
       </div>
     `;
   }).join('');
-  
+
   return `
     <div class="pie-chart-container">
       <div class="pie-chart" style="background: ${gradient}"></div>
@@ -9937,32 +9960,32 @@ function renderPieChart(tags, tvId) {
 function renderTagSelector() {
   const select = document.getElementById('analytics-tag-select');
   if (!select || !analyticsData) return;
-  
+
   // Get tagsets and tags that have activity in the selected time range
   const tagsetsWithActivity = getTagsetsWithActivityInRange();
   const tagsWithActivity = getTagsWithActivityInRange();
-  
+
   // Sort tagsets alphabetically
   tagsetsWithActivity.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-  
+
   // Sort tags alphabetically, but keep <none> (untagged) at the end
   tagsWithActivity.sort((a, b) => {
     if (a === '<none>') return 1;
     if (b === '<none>') return -1;
     return a.localeCompare(b, undefined, { sensitivity: 'base' });
   });
-  
+
   let html = '';
-  
+
   // Add tagsets optgroup if any exist
   if (tagsetsWithActivity.length > 0) {
     html += '<optgroup label="Tagsets">';
-    html += tagsetsWithActivity.map(name => 
+    html += tagsetsWithActivity.map(name =>
       `<option value="tagset:${escapeHtml(name)}">${escapeHtml(name)}</option>`
     ).join('');
     html += '</optgroup>';
   }
-  
+
   // Add tags optgroup
   if (tagsWithActivity.length > 0) {
     html += '<optgroup label="Tags">';
@@ -9972,15 +9995,15 @@ function renderTagSelector() {
     }).join('');
     html += '</optgroup>';
   }
-  
+
   select.innerHTML = html;
-  
+
   // Determine all available options (tagsets prefixed, then tags)
   const allOptions = [
     ...tagsetsWithActivity.map(n => `tagset:${n}`),
     ...tagsWithActivity
   ];
-  
+
   // If current selection is no longer available, auto-select first
   if (allOptions.length > 0) {
     if (!selectedTag || !allOptions.includes(selectedTag)) {
@@ -9997,22 +10020,22 @@ function renderTagSelector() {
 function renderImageSelector() {
   const select = document.getElementById('analytics-image-select');
   if (!select) return;
-  
+
   // Use ALL gallery images, not just ones with analytics data
   const analyticsImages = analyticsData?.images || {};
   const galleryImageNames = Object.keys(allImages || {});
-  
+
   // If no gallery images loaded yet, fall back to analytics images only
   const imageNames = galleryImageNames.length > 0 ? galleryImageNames : Object.keys(analyticsImages);
-  
+
   // Sort alphabetically for easy lookup
   imageNames.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-  
+
   select.innerHTML = imageNames.map(filename => {
       const displayName = truncateFilename(filename, 40);
       return `<option value="${escapeHtml(filename)}">${escapeHtml(displayName)}</option>`;
     }).join('');
-  
+
   // Auto-select first image
   if (imageNames.length > 0) {
     selectedImage = imageNames[0];
@@ -10025,16 +10048,16 @@ function renderTagDetail(selection) {
   const container = document.getElementById('analytics-tag-detail');
   const statsContainer = document.getElementById('analytics-tag-stats');
   if (!container || !analyticsData) return;
-  
+
   if (!selection) {
     container.innerHTML = '<div class="empty-state-small">Select a tag to view details</div>';
     if (statsContainer) statsContainer.innerHTML = '';
     return;
   }
-  
+
   // Check if this is a tagset selection
   const isTagset = selection.startsWith('tagset:');
-  
+
   if (isTagset) {
     const tagsetName = selection.substring(7); // Remove 'tagset:' prefix
     renderTagsetDetail(tagsetName, container, statsContainer);
@@ -10051,13 +10074,13 @@ function renderSingleTagDetail(tagName, container, statsContainer) {
     if (statsContainer) statsContainer.innerHTML = '';
     return;
   }
-  
+
   // Get time-filtered data for this tag
   const perTv = getPerTVStatsForTagInRange(tagName);
-  
+
   // Calculate stats for selected time range
   const tagStats = calculateTagStatsForRange(tagName);
-  
+
   // Render stats in header area
   if (statsContainer) {
     statsContainer.innerHTML = `
@@ -10068,16 +10091,16 @@ function renderSingleTagDetail(tagName, container, statsContainer) {
       </div>
     `;
   }
-  
+
   let html = '';
-  
+
   // TV breakdown - stacked horizontal bar (only if multiple TVs)
   const totalTvCount = Object.keys(analyticsData.tvs || {}).length;
   const showStackedBar = perTv.length > 0 && totalTvCount > 1;
-  
+
   // Use global TV color map for consistent colors across all views
   const tvColorMap = globalTvColorMap;
-  
+
   if (showStackedBar) {
     const segments = perTv.map((tv, index) => {
       const tvName = analyticsData.tvs?.[tv.tv_id]?.name || tv.tv_id || 'Unknown';
@@ -10085,13 +10108,13 @@ function renderSingleTagDetail(tagName, container, statsContainer) {
       const pct = tv.share || 0;
       return `<div class="stacked-bar-segment clickable" data-tv-id="${escapeHtml(tv.tv_id)}" style="width: ${pct}%; background: ${color}" title="${escapeHtml(tvName)} (${formatPercent(pct)}, ${formatHoursNice(tv.seconds || 0)})"></div>`;
     }).join('');
-    
+
     const legend = perTv.map((tv, index) => {
       const tvName = analyticsData.tvs?.[tv.tv_id]?.name || tv.tv_id || 'Unknown';
       const color = tvColorMap[tv.tv_id];
       return `<span class="stacked-bar-legend-item clickable" data-tv-id="${escapeHtml(tv.tv_id)}"><span class="stacked-bar-legend-color" style="background: ${color}"></span>${escapeHtml(tvName)}</span>`;
     }).join('');
-    
+
     html += `
       <div class="stacked-bar-section">
         <div class="stacked-bar-track">${segments}</div>
@@ -10099,10 +10122,10 @@ function renderSingleTagDetail(tagName, container, statsContainer) {
       </div>
     `;
   }
-  
+
   // Event log for this tag (show separator only if stacked bar is shown, pass TV colors for dots)
   html += renderTagEventLog(tagName, showStackedBar, tvColorMap);
-  
+
   container.innerHTML = html;
   attachTagDetailClickHandlers(container);
 }
@@ -10115,13 +10138,13 @@ function renderTagsetDetail(tagsetName, container, statsContainer) {
     if (statsContainer) statsContainer.innerHTML = '';
     return;
   }
-  
+
   // Get time-filtered data for this tagset
   const perTv = getPerTVStatsForTagsetInRange(tagsetName);
-  
+
   // Calculate stats for selected time range
   const tagsetStats = calculateTagsetStatsForRange(tagsetName);
-  
+
   // Render stats in header area
   if (statsContainer) {
     statsContainer.innerHTML = `
@@ -10132,16 +10155,16 @@ function renderTagsetDetail(tagsetName, container, statsContainer) {
       </div>
     `;
   }
-  
+
   let html = '';
-  
+
   // TV breakdown - stacked horizontal bar (only if multiple TVs)
   const totalTvCount = Object.keys(analyticsData.tvs || {}).length;
   const showStackedBar = perTv.length > 0 && totalTvCount > 1;
-  
+
   // Use global TV color map for consistent colors across all views
   const tvColorMap = globalTvColorMap;
-  
+
   if (showStackedBar) {
     const segments = perTv.map((tv, index) => {
       const tvName = analyticsData.tvs?.[tv.tv_id]?.name || tv.tv_id || 'Unknown';
@@ -10149,13 +10172,13 @@ function renderTagsetDetail(tagsetName, container, statsContainer) {
       const pct = tv.share || 0;
       return `<div class="stacked-bar-segment clickable" data-tv-id="${escapeHtml(tv.tv_id)}" style="width: ${pct}%; background: ${color}" title="${escapeHtml(tvName)} (${formatPercent(pct)}, ${formatHoursNice(tv.seconds || 0)})"></div>`;
     }).join('');
-    
+
     const legend = perTv.map((tv, index) => {
       const tvName = analyticsData.tvs?.[tv.tv_id]?.name || tv.tv_id || 'Unknown';
       const color = tvColorMap[tv.tv_id];
       return `<span class="stacked-bar-legend-item clickable" data-tv-id="${escapeHtml(tv.tv_id)}"><span class="stacked-bar-legend-color" style="background: ${color}"></span>${escapeHtml(tvName)}</span>`;
     }).join('');
-    
+
     html += `
       <div class="stacked-bar-section">
         <div class="stacked-bar-track">${segments}</div>
@@ -10163,10 +10186,10 @@ function renderTagsetDetail(tagsetName, container, statsContainer) {
       </div>
     `;
   }
-  
+
   // Event log for this tagset
   html += renderTagsetEventLog(tagsetName, showStackedBar, tvColorMap);
-  
+
   container.innerHTML = html;
   attachTagDetailClickHandlers(container);
 }
@@ -10180,7 +10203,7 @@ function attachTagDetailClickHandlers(container) {
       if (tvId) selectAnalyticsTv(tvId);
     });
   });
-  
+
   // Add click handlers for stacked bar legend items
   container.querySelectorAll('.stacked-bar-legend-item.clickable').forEach(item => {
     item.addEventListener('click', () => {
@@ -10188,7 +10211,7 @@ function attachTagDetailClickHandlers(container) {
       if (tvId) selectAnalyticsTv(tvId);
     });
   });
-  
+
   // Add click handlers for event log rows
   container.querySelectorAll('.event-log-row.clickable').forEach(row => {
     row.addEventListener('click', () => {
@@ -10202,35 +10225,35 @@ function renderImageDetail(filename) {
   const container = document.getElementById('analytics-image-detail');
   const statsContainer = document.getElementById('analytics-image-stats');
   const tagsContainer = document.getElementById('analytics-image-tags');
-  
+
   if (!container) return;
-  
+
   if (!filename) {
     container.innerHTML = '<div class="empty-state-small">Select an image to view details</div>';
     if (statsContainer) statsContainer.innerHTML = '';
     if (tagsContainer) tagsContainer.innerHTML = '';
     return;
   }
-  
+
   const imageData = analyticsData?.images?.[filename];
   const galleryData = allImages?.[filename];
-  
+
   // Get tags from gallery data if no analytics data, or from analytics data
   const tags = imageData?.tags || galleryData?.tags || [];
-  
+
   // Render tags in header row (next to title)
   if (tagsContainer) {
-    tagsContainer.innerHTML = tags.length > 0 
+    tagsContainer.innerHTML = tags.length > 0
       ? tags.map(tag => `<span class="image-tag-pill-small">${escapeHtml(tag)}</span>`).join('')
       : '<span class="image-tag-pill-small untagged">(untagged)</span>';
   }
-  
+
   // Get time-filtered data for this image (will be empty arrays/zeros if no analytics data)
   const perTv = imageData ? getPerTVStatsForImageInRange(filename) : [];
-  
+
   // Calculate stats for selected time range (will be zeros if no analytics data)
   const imageStats = imageData ? calculateImageStatsForRange(filename) : { totalSeconds: 0, eventCount: 0 };
-  
+
   // Render stats below dropdown
   if (statsContainer) {
     const lastDisplay = imageData ? getLastDisplayInfo(filename) : null;
@@ -10245,23 +10268,23 @@ function renderImageDetail(filename) {
       </div>
     `;
   }
-  
+
   let html = '';
-  
+
   // Image thumbnail with fallback handling for deleted images
   const displayName = getAnalyticsDisplayName(filename);
   html += `
     <div class="analytics-image-preview">
-      <img src="thumbs/thumb_${encodeURIComponent(filename)}" 
-           onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';" 
+      <img src="thumbs/thumb_${encodeURIComponent(filename)}"
+           onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';"
            alt="${escapeHtml(displayName)}" />
       <div class="analytics-image-unavailable" style="display:none;">Image not available</div>
     </div>
   `;
-  
+
   // Use global TV color map for consistent colors across all views
   const tvColorMap = globalTvColorMap;
-  
+
   // TV breakdown - stacked horizontal bar (only if multiple TVs)
   const totalTvCount = Object.keys(analyticsData?.tvs || {}).length;
   if (perTv.length > 0 && totalTvCount > 1) {
@@ -10271,13 +10294,13 @@ function renderImageDetail(filename) {
       const pct = tv.share || 0;
       return `<div class="stacked-bar-segment" style="width: ${pct}%; background: ${color}" title="${escapeHtml(tvName)} (${formatPercent(pct)}, ${formatHoursNice(tv.seconds || 0)})"></div>`;
     }).join('');
-    
+
     const legend = perTv.map((tv, index) => {
       const tvName = analyticsData.tvs?.[tv.tv_id]?.name || tv.tv_id || 'Unknown';
       const color = tvColorMap[tv.tv_id];
       return `<span class="stacked-bar-legend-item"><span class="stacked-bar-legend-color" style="background: ${color}"></span>${escapeHtml(tvName)}</span>`;
     }).join('');
-    
+
     html += `
       <div class="stacked-bar-section">
         <div class="stacked-bar-track">${segments}</div>
@@ -10285,7 +10308,7 @@ function renderImageDetail(filename) {
       </div>
     `;
   }
-    
+
   // Labeled timelines section
   if (perTv.length > 0) {
     html += `
@@ -10312,10 +10335,10 @@ function renderImageDetail(filename) {
       </div>
     `;
   }
-  
+
   // Event log section (pass TV colors for dots)
   html += renderImageEventLog(filename, tvColorMap);
-  
+
   container.innerHTML = html;
 }
 
@@ -10327,7 +10350,7 @@ function formatTimeAgo(timestamp) {
   const diffDays = diffMs / (1000 * 60 * 60 * 24);
   const diffWeeks = diffDays / 7;
   const diffMonths = diffDays / 30;
-  
+
   if (diffHours < 1) return 'less than an hour ago';
   if (diffHours < 24) return diffHours < 2 ? 'an hour ago' : `${Math.floor(diffHours)} hours ago`;
   if (diffDays < 7) return diffDays < 2 ? 'a day ago' : `${Math.floor(diffDays)} days ago`;
@@ -10339,19 +10362,19 @@ function formatTimeAgo(timestamp) {
 function renderInlineTimeline(filename, tvId) {
   const imageData = analyticsData?.images?.[filename];
   if (!imageData) return '';
-  
+
   const displayPeriods = imageData.display_periods?.[tvId] || [];
-  
+
   if (displayPeriods.length === 0) {
     // No display_periods means we have aggregate data but no timeline detail for this TV
     return '<div class="inline-timeline"><div class="inline-timeline-empty">No detailed timeline available</div></div>';
   }
-  
+
   // Calculate timeline using selected time range
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   // Build timeline segments with detailed tooltips
   const segments = displayPeriods
     .filter(p => p.end > rangeStart)
@@ -10366,17 +10389,17 @@ function renderInlineTimeline(filename, tvId) {
       return `<div class="inline-timeline-segment" style="left: ${leftPct}%; width: ${widthPct}%" title="${escapeHtml(tooltip)}"></div>`;
     })
     .join('');
-  
+
   if (!segments) {
     // Has display_periods but none in the selected time range - find most recent
     const mostRecent = displayPeriods.reduce((latest, p) => p.end > latest ? p.end : latest, 0);
     const timeAgo = formatTimeAgo(mostRecent);
     return `<div class="inline-timeline"><div class="inline-timeline-empty">Not displayed since ${timeAgo}</div></div>`;
   }
-  
+
   // Generate full axis (edge labels above, ticks below)
   const axis = generateTimelineAxis(rangeStart, rangeMs, false);
-  
+
   return `
     <div class="inline-timeline">
       ${axis.edges}
@@ -10392,11 +10415,11 @@ function renderImageEventLog(filename, tvColorMap = {}) {
   if (!imageData || !imageData.display_periods) {
     return '';
   }
-  
+
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   // Collect all events from all TVs within time range
   const allEvents = [];
   for (const [tvId, periods] of Object.entries(imageData.display_periods)) {
@@ -10415,16 +10438,16 @@ function renderImageEventLog(filename, tvColorMap = {}) {
       }
     }
   }
-  
+
   if (allEvents.length === 0) {
     return '<div class="event-log"><div class="event-log-title">Display Events</div><div class="event-log-empty">No events in selected time range</div></div>';
   }
-  
+
   // Sort by start time descending (most recent first)
   allEvents.sort((a, b) => b.start - a.start);
-  
+
   const hasTvColors = Object.keys(tvColorMap).length > 0;
-  
+
   const eventRows = allEvents.map(evt => {
     const startDate = new Date(evt.start);
     // duration is in ms, convert to seconds for formatHoursNice
@@ -10434,7 +10457,7 @@ function renderImageEventLog(filename, tvColorMap = {}) {
     const filterMatteSuffix = formatFilterMatteSuffix(evt.photo_filter, evt.matte);
     const tvColor = tvColorMap[evt.tvId] || '#95a5a6';
     const tvDot = hasTvColors ? `<span class="event-log-tv-dot" style="background: ${tvColor}" title="${escapeHtml(evt.tvName)}"></span>` : '';
-    
+
     return `
       <div class="event-log-row">
         <span class="event-log-date">${tvDot}${dateStr}</span>
@@ -10444,7 +10467,7 @@ function renderImageEventLog(filename, tvColorMap = {}) {
       </div>
     `;
   }).join('');
-  
+
   return `
     <div class="event-log">
       <div class="event-log-title">Display Events (${allEvents.length})</div>
@@ -10464,16 +10487,16 @@ function renderImageEventLog(filename, tvColorMap = {}) {
 function renderImageTimeline(filename, tvId) {
   const container = document.getElementById('analytics-timeline-container');
   if (!container || !analyticsData) return;
-  
+
   const imageData = analyticsData.images?.[filename];
   if (!imageData) {
     container.style.display = 'none';
     return;
   }
-  
+
   // Get display periods for this TV (from imageData.display_periods if available)
   const displayPeriods = imageData.display_periods?.[tvId] || [];
-  
+
   if (displayPeriods.length === 0) {
     // Show placeholder with generic timeline
     container.style.display = 'block';
@@ -10488,12 +10511,12 @@ function renderImageTimeline(filename, tvId) {
     `;
     return;
   }
-  
+
   // Calculate timeline (last 7 days)
   const now = Date.now();
   const weekAgo = now - (7 * 24 * 60 * 60 * 1000);
   const totalRange = now - weekAgo;
-  
+
   // Build timeline segments
   const segments = displayPeriods
     .filter(p => p.end > weekAgo)
@@ -10505,7 +10528,7 @@ function renderImageTimeline(filename, tvId) {
       return `<div class="timeline-bar-segment" style="left: ${leftPct}%; width: ${widthPct}%" title="${new Date(start).toLocaleString()}"></div>`;
     })
     .join('');
-  
+
   container.style.display = 'block';
   container.innerHTML = `
     <div class="timeline-bar-container">
@@ -10529,14 +10552,14 @@ function setupAnalyticsEventListeners() {
   if (retryBtn) {
     retryBtn.onclick = () => loadAnalytics();
   }
-  
+
   // Time range buttons (time pills)
   document.querySelectorAll('#analytics-time-range-buttons .time-pill').forEach(btn => {
     btn.addEventListener('click', () => {
       // Update active state
       document.querySelectorAll('#analytics-time-range-buttons .time-pill').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      
+
       // Update selected range and re-render affected views
       selectedTimeRange = btn.dataset.range;
       updateDateRangeHint();
@@ -10548,10 +10571,10 @@ function setupAnalyticsEventListeners() {
       renderOverallPieChart();
     });
   });
-  
+
   // Initial date range hint
   updateDateRangeHint();
-  
+
   // TV selector
   const tvSelect = document.getElementById('analytics-tv-select');
   if (tvSelect) {
@@ -10560,7 +10583,7 @@ function setupAnalyticsEventListeners() {
       renderTVDetail(selectedTv);
     };
   }
-  
+
   // Tag selector
   const tagSelect = document.getElementById('analytics-tag-select');
   if (tagSelect) {
@@ -10569,7 +10592,7 @@ function setupAnalyticsEventListeners() {
       renderTagDetail(selectedTag);
     };
   }
-  
+
   // Image selector (dropdown)
   const imageSelect = document.getElementById('analytics-image-select');
   if (imageSelect) {
@@ -10582,25 +10605,25 @@ function setupAnalyticsEventListeners() {
 
 function selectAnalyticsTv(tvId) {
   selectedTv = tvId;
-  
+
   // Update TV dropdown
   const tvSelect = document.getElementById('analytics-tv-select');
   if (tvSelect) {
     tvSelect.value = tvId;
   }
-  
+
   renderTVDetail(tvId);
 }
 
 function selectAnalyticsImage(filename) {
   selectedImage = filename;
-  
+
   // Update image dropdown
   const imageSelect = document.getElementById('analytics-image-select');
   if (imageSelect) {
     imageSelect.value = filename;
   }
-  
+
   renderImageDetail(filename);
 }
 
@@ -10610,7 +10633,7 @@ function getAnalyticsDisplayName(filename) {
   if (!hasUuid) {
     return filename;
   }
-  
+
   // Check if removing the hash would cause ambiguity with other files
   // Use allImages (all gallery files) since we now show all images in the dropdown
   const allFilenames = Object.keys(allImages || {});
@@ -10619,11 +10642,11 @@ function getAnalyticsDisplayName(filename) {
     const parsed = extractBaseComponents(fn);
     return (parsed.base + parsed.ext) === baseWithExt;
   }).length;
-  
+
   if (sharedBaseCount > 1) {
     return filename; // Keep hash to disambiguate
   }
-  
+
   return baseWithExt; // Safe to remove hash
 }
 
@@ -10631,7 +10654,7 @@ function getAnalyticsDisplayName(filename) {
 function truncateFilename(filename, maxLen) {
   // First, get the display name (remove hash if unique)
   const displayName = getAnalyticsDisplayName(filename);
-  
+
   if (!displayName || displayName.length <= maxLen) return displayName;
   const ext = displayName.lastIndexOf('.');
   if (ext > 0 && displayName.length - ext < 6) {
@@ -10651,9 +10674,9 @@ function truncateFilename(filename, maxLen) {
 function formatFilterMatteSuffix(photoFilter, matte) {
   const hasFilter = photoFilter && photoFilter.toLowerCase() !== 'none';
   const hasMatte = matte && matte.toLowerCase() !== 'none';
-  
+
   if (!hasFilter && !hasMatte) return '';
-  
+
   let html = '';
   if (hasFilter) {
     html += `<span class="indicator-filter" title="filter: ${photoFilter}">✦</span>`;
@@ -10661,7 +10684,7 @@ function formatFilterMatteSuffix(photoFilter, matte) {
   if (hasMatte) {
     html += `<span class="indicator-matte" title="matte: ${matte}">⧈</span>`;
   }
-  
+
   return ` <span class="filter-matte-indicators">${html}</span>`;
 }
 
@@ -10675,7 +10698,7 @@ function formatHoursNice(seconds) {
   const totalMinutes = Math.round(seconds / 60);
   const hours = Math.floor(totalMinutes / 60);
   const mins = totalMinutes % 60;
-  
+
   // Show days for >= 48 hours
   if (hours >= 48) {
     const days = Math.round(hours / 24);
@@ -10705,11 +10728,11 @@ function calculateTVStatsForRange(tvId) {
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   const images = analyticsData?.images || {};
   let totalSeconds = 0;
   let eventCount = 0;
-  
+
   // Sum up display time for this TV across all images in the time range
   for (const [filename, imageData] of Object.entries(images)) {
     const periods = imageData.display_periods?.[tvId] || [];
@@ -10722,7 +10745,7 @@ function calculateTVStatsForRange(tvId) {
       }
     }
   }
-  
+
   // Calculate share of total (all TVs in this time range)
   let allTVsTotal = 0;
   const tvIds = Object.keys(analyticsData?.tvs || {});
@@ -10738,9 +10761,9 @@ function calculateTVStatsForRange(tvId) {
       }
     }
   }
-  
+
   const shareOfTotal = allTVsTotal > 0 ? (totalSeconds / allTVsTotal) * 100 : 0;
-  
+
   return { totalSeconds, eventCount, shareOfTotal };
 }
 
@@ -10749,10 +10772,10 @@ function getTagsWithActivityInRange() {
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   const images = analyticsData?.images || {};
   const tagsWithActivity = new Set();
-  
+
   for (const [filename, imageData] of Object.entries(images)) {
     // Check if this image has any display periods in range
     let hasActivityInRange = false;
@@ -10765,7 +10788,7 @@ function getTagsWithActivityInRange() {
       }
       if (hasActivityInRange) break;
     }
-    
+
     if (hasActivityInRange) {
       const imageTags = imageData.tags || [];
       if (imageTags.length === 0) {
@@ -10775,7 +10798,7 @@ function getTagsWithActivityInRange() {
       }
     }
   }
-  
+
   return Array.from(tagsWithActivity);
 }
 
@@ -10785,14 +10808,14 @@ function imageMatchesTagset(imageData, tagset) {
   const imageTags = (imageData.tags || []).map(t => t.toLowerCase());
   const includeTags = (tagset.tags || []).map(t => t.toLowerCase());
   const excludeTags = (tagset.exclude_tags || []).map(t => t.toLowerCase());
-  
+
   // If no include tags specified, all images match (unless excluded)
-  const matchesInclude = includeTags.length === 0 || 
+  const matchesInclude = includeTags.length === 0 ||
     imageTags.some(tag => includeTags.includes(tag));
-  
+
   // Check none of the image tags are in exclude list
   const matchesExclude = !imageTags.some(tag => excludeTags.includes(tag));
-  
+
   return matchesInclude && matchesExclude;
 }
 
@@ -10802,10 +10825,10 @@ function getTagsetsWithActivityInRange() {
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   const images = analyticsData?.images || {};
   const activeSets = new Set();
-  
+
   // Find all tagset_names recorded in events within the time range
   for (const [filename, imageData] of Object.entries(images)) {
     for (const [tvId, periods] of Object.entries(imageData.display_periods || {})) {
@@ -10819,7 +10842,7 @@ function getTagsetsWithActivityInRange() {
       }
     }
   }
-  
+
   return Array.from(activeSets).sort((a, b) => a.localeCompare(b));
 }
 
@@ -10827,15 +10850,15 @@ function getTagsetsWithActivityInRange() {
 // Filters by tagset_name recorded in events, not current tag matching
 function calculateTagsetStatsForRange(tagsetName) {
   if (!tagsetName) return { totalSeconds: 0, eventCount: 0 };
-  
+
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   const images = analyticsData?.images || {};
   let totalSeconds = 0;
   let eventCount = 0;
-  
+
   for (const [filename, imageData] of Object.entries(images)) {
     for (const [tvId, periods] of Object.entries(imageData.display_periods || {})) {
       for (const period of periods) {
@@ -10849,7 +10872,7 @@ function calculateTagsetStatsForRange(tagsetName) {
       }
     }
   }
-  
+
   return { totalSeconds, eventCount };
 }
 
@@ -10857,15 +10880,15 @@ function calculateTagsetStatsForRange(tagsetName) {
 // Filters by tagset_name recorded in events, not current tag matching
 function getPerTVStatsForTagsetInRange(tagsetName) {
   if (!tagsetName) return [];
-  
+
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   const images = analyticsData?.images || {};
   const tvStats = {};
   let totalSeconds = 0;
-  
+
   for (const [filename, imageData] of Object.entries(images)) {
     for (const [tvId, periods] of Object.entries(imageData.display_periods || {})) {
       for (const period of periods) {
@@ -10880,7 +10903,7 @@ function getPerTVStatsForTagsetInRange(tagsetName) {
       }
     }
   }
-  
+
   return Object.entries(tvStats)
     .map(([tv_id, seconds]) => ({
       tv_id,
@@ -10893,17 +10916,17 @@ function getPerTVStatsForTagsetInRange(tagsetName) {
 // Render event log for a tagset (events where tagset_name matches)
 function renderTagsetEventLog(tagsetName, showSeparator = true, tvColorMap = {}) {
   if (!tagsetName) return '<div class="event-log"><div class="event-log-empty">Tagset not found</div></div>';
-  
+
   const images = analyticsData?.images || {};
   const tvs = analyticsData?.tvs || {};
-  
+
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   // Collect all events where tagset_name matches
   const allEvents = [];
-  
+
   for (const [filename, imageData] of Object.entries(images)) {
     for (const [tvId, periods] of Object.entries(imageData.display_periods || {})) {
       const tvName = tvs[tvId]?.name || 'Unknown TV';
@@ -10924,17 +10947,17 @@ function renderTagsetEventLog(tagsetName, showSeparator = true, tvColorMap = {})
       }
     }
   }
-  
+
   const separatorClass = showSeparator ? '' : ' no-separator';
   const hasTvColors = Object.keys(tvColorMap).length > 0;
-  
+
   if (allEvents.length === 0) {
     return `<div class="event-log${separatorClass}"><div class="event-log-title">Display Events</div><div class="event-log-empty">No events in selected time range</div></div>`;
   }
-  
+
   // Sort by start time descending
   allEvents.sort((a, b) => b.start - a.start);
-  
+
   const eventRows = allEvents.map(evt => {
     const startDate = new Date(evt.start);
     const dateStr = startDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -10943,7 +10966,7 @@ function renderTagsetEventLog(tagsetName, showSeparator = true, tvColorMap = {})
     const filterMatteSuffix = formatFilterMatteSuffix(evt.photo_filter, evt.matte);
     const tvColor = tvColorMap[evt.tvId] || '#95a5a6';
     const tvDot = hasTvColors ? `<span class="event-log-tv-dot" style="background: ${tvColor}" title="${escapeHtml(evt.tvName)}"></span>` : '';
-    
+
     return `
       <div class="event-log-row clickable" data-filename="${escapeHtml(evt.filename)}">
         <span class="event-log-date">${tvDot}${dateStr}</span>
@@ -10953,7 +10976,7 @@ function renderTagsetEventLog(tagsetName, showSeparator = true, tvColorMap = {})
       </div>
     `;
   }).join('');
-  
+
   return `
     <div class="event-log${separatorClass}">
       <div class="event-log-title">Display Events (${allEvents.length})</div>
@@ -10977,15 +11000,15 @@ function calculateTagStatsForRange(tagName) {
   const images = analyticsData?.images || {};
   let totalSeconds = 0;
   let eventCount = 0;
-  
+
   for (const [filename, imageData] of Object.entries(images)) {
     const imageTags = imageData.tags || [];
-    const hasTag = tagName === '<none>' 
-      ? imageTags.length === 0 
+    const hasTag = tagName === '<none>'
+      ? imageTags.length === 0
       : imageTags.includes(tagName);
-    
+
     if (!hasTag) continue;
-    
+
     for (const [tvId, periods] of Object.entries(imageData.display_periods || {})) {
       for (const period of periods) {
         if (period.end > rangeStart) {
@@ -10997,7 +11020,7 @@ function calculateTagStatsForRange(tagName) {
       }
     }
   }
-  
+
   return { totalSeconds, eventCount };
 }
 
@@ -11006,14 +11029,14 @@ function calculateImageStatsForRange(filename) {
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   const imageData = analyticsData?.images?.[filename];
   if (!imageData) return { totalSeconds: 0, eventCount: 0, tvCount: 0 };
-  
+
   let totalSeconds = 0;
   let eventCount = 0;
   const tvsWithActivity = new Set();
-  
+
   for (const [tvId, periods] of Object.entries(imageData.display_periods || {})) {
     for (const period of periods) {
       if (period.end > rangeStart) {
@@ -11025,7 +11048,7 @@ function calculateImageStatsForRange(filename) {
       }
     }
   }
-  
+
   return { totalSeconds, eventCount, tvCount: tvsWithActivity.size };
 }
 
@@ -11034,10 +11057,10 @@ function getTopImagesForTVInRange(tvId) {
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   const images = analyticsData?.images || {};
   const imageSeconds = {};
-  
+
   for (const [filename, imageData] of Object.entries(images)) {
     const periods = imageData.display_periods?.[tvId] || [];
     let seconds = 0;
@@ -11052,7 +11075,7 @@ function getTopImagesForTVInRange(tvId) {
       imageSeconds[filename] = seconds;
     }
   }
-  
+
   // Sort by seconds descending and return top entries
   return Object.entries(imageSeconds)
     .map(([filename, seconds]) => ({ filename, seconds }))
@@ -11064,18 +11087,18 @@ function getTopImagesForTagInRange(tagName) {
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   const images = analyticsData?.images || {};
   const imageSeconds = {};
-  
+
   for (const [filename, imageData] of Object.entries(images)) {
     const imageTags = imageData.tags || [];
-    const hasTag = tagName === '<none>' 
-      ? imageTags.length === 0 
+    const hasTag = tagName === '<none>'
+      ? imageTags.length === 0
       : imageTags.includes(tagName);
-    
+
     if (!hasTag) continue;
-    
+
     let seconds = 0;
     for (const [tvId, periods] of Object.entries(imageData.display_periods || {})) {
       for (const period of periods) {
@@ -11090,7 +11113,7 @@ function getTopImagesForTagInRange(tagName) {
       imageSeconds[filename] = seconds;
     }
   }
-  
+
   return Object.entries(imageSeconds)
     .map(([filename, seconds]) => ({ filename, seconds }))
     .sort((a, b) => b.seconds - a.seconds);
@@ -11101,13 +11124,13 @@ function getPerTVStatsForImageInRange(filename) {
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   const imageData = analyticsData?.images?.[filename];
   if (!imageData) return [];
-  
+
   const tvStats = {};
   let totalSeconds = 0;
-  
+
   for (const [tvId, periods] of Object.entries(imageData.display_periods || {})) {
     let seconds = 0;
     for (const period of periods) {
@@ -11122,7 +11145,7 @@ function getPerTVStatsForImageInRange(filename) {
       totalSeconds += seconds;
     }
   }
-  
+
   // Return array with share percentages
   return Object.entries(tvStats)
     .map(([tv_id, seconds]) => ({
@@ -11138,19 +11161,19 @@ function getPerTVStatsForTagInRange(tagName) {
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   const images = analyticsData?.images || {};
   const tvStats = {};
   let totalSeconds = 0;
-  
+
   for (const [filename, imageData] of Object.entries(images)) {
     const imageTags = imageData.tags || [];
-    const hasTag = tagName === '<none>' 
-      ? imageTags.length === 0 
+    const hasTag = tagName === '<none>'
+      ? imageTags.length === 0
       : imageTags.includes(tagName);
-    
+
     if (!hasTag) continue;
-    
+
     for (const [tvId, periods] of Object.entries(imageData.display_periods || {})) {
       for (const period of periods) {
         if (period.end > rangeStart) {
@@ -11163,7 +11186,7 @@ function getPerTVStatsForTagInRange(tagName) {
       }
     }
   }
-  
+
   return Object.entries(tvStats)
     .map(([tv_id, seconds]) => ({
       tv_id,
@@ -11184,11 +11207,11 @@ function formatDateRange(startMs, endMs) {
 function updateDateRangeHint() {
   const hintEl = document.getElementById('analytics-date-range');
   if (!hintEl) return;
-  
+
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   // Map time range to human-readable label
   const rangeLabels = {
     '1h': 'hour',
@@ -11198,9 +11221,9 @@ function updateDateRangeHint() {
     '6mo': '6 months'
   };
   const rangeLabel = rangeLabels[selectedTimeRange] || 'week';
-  
+
   const startDate = new Date(rangeStart);
-  
+
   // For hour/day, include time; for longer ranges, just date
   let dateStr;
   if (selectedTimeRange === '1h' || selectedTimeRange === '1d') {
@@ -11209,7 +11232,7 @@ function updateDateRangeHint() {
   } else {
     dateStr = startDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
   }
-  
+
   hintEl.textContent = `Displaying last ${rangeLabel} of shuffle data (since ${dateStr})`;
 }
 
@@ -11217,22 +11240,22 @@ function updateDateRangeHint() {
 function renderTagEventLog(tagName, showSeparator = true, tvColorMap = {}) {
   const images = analyticsData?.images || {};
   const tvs = analyticsData?.tvs || {};
-  
+
   const now = Date.now();
   const rangeMs = TIME_RANGES[selectedTimeRange] || TIME_RANGES['1w'];
   const rangeStart = now - rangeMs;
-  
+
   // Collect all events for images with this tag
   const allEvents = [];
-  
+
   for (const [filename, imageData] of Object.entries(images)) {
     const imageTags = imageData.tags || [];
-    const hasTag = tagName === '<none>' 
-      ? imageTags.length === 0 
+    const hasTag = tagName === '<none>'
+      ? imageTags.length === 0
       : imageTags.includes(tagName);
-    
+
     if (!hasTag) continue;
-    
+
     for (const [tvId, periods] of Object.entries(imageData.display_periods || {})) {
       const tvName = tvs[tvId]?.name || 'Unknown TV';
       for (const period of periods) {
@@ -11251,17 +11274,17 @@ function renderTagEventLog(tagName, showSeparator = true, tvColorMap = {}) {
       }
     }
   }
-  
+
   const separatorClass = showSeparator ? '' : ' no-separator';
   const hasTvColors = Object.keys(tvColorMap).length > 0;
-  
+
   if (allEvents.length === 0) {
     return `<div class="event-log${separatorClass}"><div class="event-log-title">Display Events</div><div class="event-log-empty">No events in selected time range</div></div>`;
   }
-  
+
   // Sort by start time descending
   allEvents.sort((a, b) => b.start - a.start);
-  
+
   const eventRows = allEvents.map(evt => {
     const startDate = new Date(evt.start);
     const dateStr = startDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -11270,7 +11293,7 @@ function renderTagEventLog(tagName, showSeparator = true, tvColorMap = {}) {
     const filterMatteSuffix = formatFilterMatteSuffix(evt.photo_filter, evt.matte);
     const tvColor = tvColorMap[evt.tvId] || '#95a5a6';
     const tvDot = hasTvColors ? `<span class="event-log-tv-dot" style="background: ${tvColor}" title="${escapeHtml(evt.tvName)}"></span>` : '';
-    
+
     return `
       <div class="event-log-row clickable" data-filename="${escapeHtml(evt.filename)}">
         <span class="event-log-date">${tvDot}${dateStr}</span>
@@ -11280,7 +11303,7 @@ function renderTagEventLog(tagName, showSeparator = true, tvColorMap = {}) {
       </div>
     `;
   }).join('');
-  
+
   return `
     <div class="event-log${separatorClass}">
       <div class="event-log-title">Display Events (${allEvents.length})</div>
@@ -11350,15 +11373,15 @@ function countImagesForTagset(tagset) {
 function renderTagsetsTable() {
   const container = document.getElementById('tagsets-table-container');
   if (!container) return;
-  
+
   const tagsetNames = Object.keys(allGlobalTagsets || {}).sort((a, b) => a.localeCompare(b));
-  
+
   if (tagsetNames.length === 0) {
     container.innerHTML = '<p class="empty-state">No tagsets defined. Click "+ New" to create one.</p>';
     initNewTagsetButton();
     return;
   }
-  
+
   let html = `
     <table class="tagsets-table">
       <thead>
@@ -11373,7 +11396,7 @@ function renderTagsetsTable() {
       </thead>
       <tbody>
   `;
-  
+
   for (const name of tagsetNames) {
     const tagset = allGlobalTagsets[name];
     const includeTags = [...(tagset.tags || [])].sort((a, b) => a.localeCompare(b));
@@ -11381,18 +11404,18 @@ function renderTagsetsTable() {
     const tagWeights = tagset.tag_weights || {};
     const weightingType = tagset.weighting_type || 'image';
     const hasCustomWeights = Object.keys(tagWeights).length > 0;
-    
+
     // Find TVs using this tagset
     const tvsUsing = allTVs.filter(tv => tv.selected_tagset === name);
     const tvsOverride = allTVs.filter(tv => tv.override_tagset === name);
-    
+
     const isExpanded = expandedTagsets.has(name);
-    
+
     // Format tag list - text when collapsed, chips when expanded
     // showWeights: if true and hasCustomWeights, show percentages
     const formatTagList = (tags, emptyText, showWeights = false) => {
       if (tags.length === 0) return `<span class="tag-summary-none">${emptyText}</span>`;
-      
+
       // Calculate percentages if showing weights
       let percentages = {};
       if (showWeights && hasCustomWeights) {
@@ -11402,10 +11425,10 @@ function renderTagsetsTable() {
           percentages[tag] = ((weight / total) * 100).toFixed(1);
         });
       }
-      
+
       const tagStr = tags.join(', ');
       const needsTruncation = tagStr.length > 120;
-      
+
       // Helper to format a single tag with optional percentage
       const formatTag = (t) => {
         if (showWeights && hasCustomWeights && percentages[t]) {
@@ -11413,7 +11436,7 @@ function renderTagsetsTable() {
         }
         return escapeHtml(t);
       };
-      
+
       if (isExpanded || !needsTruncation) {
         // Show all tags
         if (needsTruncation) {
@@ -11426,7 +11449,7 @@ function renderTagsetsTable() {
         }
         return `<span>${escapeHtml(tagStr)}</span>`;
       }
-      
+
       // Truncated view - show as text
       let shown = [];
       let len = 0;
@@ -11440,13 +11463,13 @@ function renderTagsetsTable() {
       const fullTitle = tags.map(t => formatTag(t)).join(', ');
       return `<span class="tag-list-truncated" title="${escapeHtml(fullTitle)}">${shown.join(', ')} <span class="more-count expandable" data-tagset-name="${escapeHtml(name)}">+${remaining}</span></span>`;
     };
-    
+
     const includeSummary = formatTagList(includeTags, 'All', true);
     const excludeSummary = formatTagList(excludeTags, 'None', false);
-    
+
     // Used by summary - overrides first, then regular assignments on new line
     let usedByParts = [];
-    
+
     // Build override text first
     if (tvsOverride.length > 0) {
       const overrideParts = tvsOverride.map(tv => {
@@ -11455,24 +11478,24 @@ function renderTagsetsTable() {
       });
       usedByParts.push(overrideParts.join(', '));
     }
-    
+
     // Then regular assignments on new line
     if (tvsUsing.length > 0) {
-      const tvNames = tvsUsing.length <= 2 
+      const tvNames = tvsUsing.length <= 2
         ? tvsUsing.map(tv => tv.name).join(', ')
         : `${tvsUsing.length} TVs`;
       usedByParts.push(tvNames);
     }
-    
-    const usedBySummary = usedByParts.length > 0 
+
+    const usedBySummary = usedByParts.length > 0
       ? usedByParts.join('<br>')
       : '<span class="tag-summary-none">—</span>';
-    
+
     const hasOverride = tvsOverride.length > 0;
-    
+
     // Count images matching this tagset
     const matchCount = countImagesForTagset(tagset);
-    
+
     // Build mobile override callout text
     let mobileOverrideText = '';
     if (hasOverride) {
@@ -11482,19 +11505,19 @@ function renderTagsetsTable() {
       });
       mobileOverrideText = overrideParts.join('; ');
     }
-    
+
     // Build mobile "used by" text (non-override TVs only)
     let mobileUsedByText = '';
     if (tvsUsing.length > 0) {
-      mobileUsedByText = tvsUsing.length <= 3 
+      mobileUsedByText = tvsUsing.length <= 3
         ? tvsUsing.map(tv => tv.name).join(', ')
         : `${tvsUsing.length} TVs`;
     }
-    
+
     // Mobile tag counts
     const includeCount = includeTags.length;
     const excludeCount = excludeTags.length;
-    
+
     // Check if this tagset is expanded (for mobile tag details)
     const isMobileExpanded = expandedTagsets.has(name);
 
@@ -11564,21 +11587,21 @@ function renderTagsetsTable() {
         ` : ''}
     `;
   }
-  
+
   html += `
       </tbody>
     </table>
   `;
-  
+
   container.innerHTML = html;
-  
+
   // Attach event listeners - row click: edit on desktop, expand/collapse on mobile
   container.querySelectorAll('.tagset-row').forEach(row => {
     row.addEventListener('click', (e) => {
       // Don't handle if clicking action buttons
       if (e.target.closest('.tagset-edit-btn') || e.target.closest('.tagset-delete-btn') || e.target.closest('.more-count') || e.target.closest('.collapse-link') || e.target.closest('.mobile-expand-btn')) return;
       const tagsetName = row.dataset.tagsetName;
-      
+
       // On desktop (>768px), open edit modal; on mobile, toggle expand
       if (window.innerWidth > 768) {
         openTagsetModal(tagsetName);
@@ -11592,7 +11615,7 @@ function renderTagsetsTable() {
       }
     });
   });
-  
+
   // Edit button opens modal
   container.querySelectorAll('.tagset-edit-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -11600,7 +11623,7 @@ function renderTagsetsTable() {
       openTagsetModal(btn.dataset.tagsetName);
     });
   });
-  
+
   // Mobile expand/collapse button
   container.querySelectorAll('.mobile-expand-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -11614,7 +11637,7 @@ function renderTagsetsTable() {
       renderTagsetsTable();
     });
   });
-  
+
   // Make +N more text clickable to expand
   container.querySelectorAll('.more-count.expandable').forEach(el => {
     el.addEventListener('click', (e) => {
@@ -11623,7 +11646,7 @@ function renderTagsetsTable() {
       renderTagsetsTable();
     });
   });
-  
+
   // Override row click also toggles expand/collapse
   container.querySelectorAll('.mobile-tagset-override-row').forEach(row => {
     row.addEventListener('click', (e) => {
@@ -11636,7 +11659,7 @@ function renderTagsetsTable() {
       renderTagsetsTable();
     });
   });
-  
+
   // Expanded tags row click collapses
   container.querySelectorAll('.mobile-tagset-tags-row').forEach(row => {
     row.addEventListener('click', (e) => {
@@ -11647,7 +11670,7 @@ function renderTagsetsTable() {
       }
     });
   });
-  
+
   // Make << collapse link clickable
   container.querySelectorAll('.collapse-link').forEach(el => {
     el.addEventListener('click', (e) => {
@@ -11656,7 +11679,7 @@ function renderTagsetsTable() {
       renderTagsetsTable();
     });
   });
-  
+
   container.querySelectorAll('.tagset-delete-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
@@ -11668,7 +11691,7 @@ function renderTagsetsTable() {
       }
     });
   });
-  
+
   initNewTagsetButton();
 }
 
@@ -11705,17 +11728,17 @@ function updateTagsetDropdownForTV(deviceId, preserveTagset) {
 // Format override time compact for tagsets table: "until 3:00pm (45m)"
 function formatOverrideTimeCompact(expiryTime) {
   if (!expiryTime) return '';
-  
+
   const now = new Date();
   const expiry = new Date(expiryTime);
   const diffMs = expiry - now;
-  
+
   if (diffMs <= 0) return '(expired)';
-  
+
   const diffMins = Math.floor(diffMs / 60000);
   const hours = Math.floor(diffMins / 60);
   const mins = diffMins % 60;
-  
+
   // Format remaining time
   let remaining;
   if (hours > 0) {
@@ -11723,27 +11746,27 @@ function formatOverrideTimeCompact(expiryTime) {
   } else {
     remaining = `${mins}m`;
   }
-  
+
   // Format expiry time
   const timeStr = expiry.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  
+
   return `until ${timeStr} (${remaining})`;
 }
 
 // Format override time remaining with expiry
 function formatOverrideTimeDisplay(expiryTime) {
   if (!expiryTime) return '-';
-  
+
   const now = new Date();
   const expiry = new Date(expiryTime);
   const diffMs = expiry - now;
-  
+
   if (diffMs <= 0) return 'Expired';
-  
+
   const diffMins = Math.floor(diffMs / 60000);
   const hours = Math.floor(diffMins / 60);
   const mins = diffMins % 60;
-  
+
   // Format remaining time
   let remaining;
   if (hours > 0) {
@@ -11751,15 +11774,15 @@ function formatOverrideTimeDisplay(expiryTime) {
   } else {
     remaining = `${mins}m`;
   }
-  
+
   // Format expiry time
   const isToday = expiry.toDateString() === now.toDateString();
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const isTomorrow = expiry.toDateString() === tomorrow.toDateString();
-  
+
   const timeStr = expiry.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  
+
   let expiryStr;
   if (isToday) {
     expiryStr = timeStr;
@@ -11768,7 +11791,7 @@ function formatOverrideTimeDisplay(expiryTime) {
   } else {
     expiryStr = `${expiry.toLocaleDateString([], { weekday: 'short' })} ${timeStr}`;
   }
-  
+
   return `${remaining} (until ${expiryStr})`;
 }
 
@@ -11776,18 +11799,18 @@ function formatOverrideTimeDisplay(expiryTime) {
 function renderTVAssignments() {
   const container = document.getElementById('tv-tagset-assignments');
   if (!container) return;
-  
+
   if (!allTVs || allTVs.length === 0) {
     container.innerHTML = '<p class="empty-state">No TVs found.</p>';
     return;
   }
-  
+
   // Use GLOBAL tagsets for all TVs
   const tagsetNames = Object.keys(allGlobalTagsets || {});
-  
+
   // Sort TVs alphabetically by name
   const sortedTVs = [...allTVs].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  
+
   let html = `
     <table class="tv-assignments-table">
       <thead>
@@ -11801,13 +11824,13 @@ function renderTVAssignments() {
       </thead>
       <tbody>
   `;
-  
+
   for (const tv of sortedTVs) {
     const hasOverride = !!tv.override_tagset;
     const selectedTagset = tv.selected_tagset || '-';
     const overrideTagset = hasOverride ? tv.override_tagset : '-';
     const overrideTime = hasOverride ? formatOverrideTimeDisplay(tv.override_expiry_time) : '-';
-    
+
     // Build tagset dropdown options
     const tagsetOptions = `
       <option value="">-- None --</option>
@@ -11817,7 +11840,7 @@ function renderTVAssignments() {
         </option>
       `).join('')}
     `;
-    
+
     html += `
         <tr class="tv-assignment-row${hasOverride ? ' has-override' : ''}" data-device-id="${escapeHtml(tv.device_id)}"${hasOverride ? ' style="background: #fffaf0 !important;"' : ''}>
           <td class="tv-col-name" data-label="TV"${hasOverride ? ' style="background: #fffaf0 !important;"' : ''}>
@@ -11854,63 +11877,63 @@ function renderTVAssignments() {
         ` : ''}
     `;
   }
-  
+
   html += `
       </tbody>
     </table>
   `;
-  
+
   container.innerHTML = html;
-  
+
   // Attach event listeners for tagset dropdown changes
   container.querySelectorAll('.tagset-select').forEach(select => {
     // Store original value for undo
     let previousValue = select.value;
     let undoTimeout = null;
     const undoBtn = select.parentElement.querySelector('.tagset-undo-btn');
-    
+
     select.addEventListener('change', async (e) => {
       const deviceId = select.dataset.deviceId;
       const tvName = select.dataset.tvName;
       const tagsetName = select.value;
-      
+
       const fromName = previousValue || 'None';
       const toName = tagsetName || 'None';
       const undoValue = previousValue; // Capture for undo closure
-      
+
       await selectTagset(deviceId, tagsetName || null, true); // Skip re-render
-      
+
       // Show toast
       showToast(`${tvName}: tagset changed from "${fromName}" to "${toName}"`);
-      
+
       // Show undo button with tooltip
       undoBtn.title = `Undo - revert to "${fromName}"`;
       undoBtn.classList.add('show');
-      
+
       // Clear any existing timeout
       if (undoTimeout) clearTimeout(undoTimeout);
-      
+
       // Hide undo after 6 seconds
       undoTimeout = setTimeout(() => {
         undoBtn.classList.remove('show');
       }, 6000);
-      
+
       // Set up undo handler (replace any existing)
       undoBtn.onclick = async () => {
         if (undoTimeout) clearTimeout(undoTimeout);
         undoBtn.classList.remove('show');
-        
+
         select.value = undoValue;
         await selectTagset(deviceId, undoValue || null, true); // Skip re-render
         showToast(`${tvName}: tagset reverted to "${undoValue || 'None'}"`);
         previousValue = undoValue;
       };
-      
+
       // Update previous value for next change
       previousValue = tagsetName;
     });
   });
-  
+
   container.querySelectorAll('.clear-override-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
@@ -11919,7 +11942,7 @@ function renderTVAssignments() {
       await clearOverride(deviceId);
     });
   });
-  
+
   container.querySelectorAll('.set-override-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.preventDefault();
@@ -11935,13 +11958,13 @@ function startTagsetEdit(row) {
   const editBtn = row.querySelector('.tagset-edit-btn');
   const saveBtn = row.querySelector('.tagset-save-btn');
   const cancelBtn = row.querySelector('.tagset-cancel-btn');
-  
+
   display.classList.add('hidden');
   select.classList.remove('hidden');
   editBtn.classList.add('hidden');
   saveBtn.classList.remove('hidden');
   cancelBtn.classList.remove('hidden');
-  
+
   select.focus();
 }
 
@@ -12470,13 +12493,13 @@ function openTagsetModal(tagsetName) {
   const form = document.getElementById('tagset-form');
   const nameInput = document.getElementById('tagset-name-input');
   const deleteBtn = document.getElementById('delete-tagset-btn');
-  
+
   // Store original name for rename support
   form.dataset.originalName = tagsetName || '';
-  
+
   let existingTagset = null;
   const tagsetCount = Object.keys(allGlobalTagsets || {}).length;
-  
+
   if (tagsetName) {
     // Edit mode - get from global tagsets
     titleEl.textContent = `Edit Tagset: ${tagsetName}`;
@@ -12501,7 +12524,7 @@ function openTagsetModal(tagsetName) {
     nameInput.classList.remove('readonly');
     deleteBtn.style.display = 'none';
   }
-  
+
   // Initialize state from existing tagset or empty
   tagsetModalIncludeTags = [...(existingTagset?.tags || [])];
   tagsetModalExcludeTags = [...(existingTagset?.exclude_tags || [])];
@@ -12509,12 +12532,12 @@ function openTagsetModal(tagsetName) {
   tagsetModalWeightingType = existingTagset?.weighting_type || 'image';
   tagsetModalMode = 'include';
   tagsetModalActiveTab = 'tags';
-  
+
   // Render the UI
   renderTagsetModalUI();
   initTagsetModalHandlers();
   initTagsetTabHandlers();
-  
+
   modal.classList.add('active');
 }
 
@@ -12532,7 +12555,7 @@ function renderTagsetModalUI() {
 function renderTagsetTabs() {
   const tabs = document.querySelectorAll('.tagset-tab');
   const contents = document.querySelectorAll('.tagset-tab-content');
-  
+
   tabs.forEach(tab => {
     if (tab.dataset.tab === tagsetModalActiveTab) {
       tab.classList.add('active');
@@ -12540,7 +12563,7 @@ function renderTagsetTabs() {
       tab.classList.remove('active');
     }
   });
-  
+
   contents.forEach(content => {
     const tabName = content.id.replace('tagset-tab-', '');
     if (tabName === tagsetModalActiveTab) {
@@ -12549,7 +12572,7 @@ function renderTagsetTabs() {
       content.classList.remove('active');
     }
   });
-  
+
   // Update reset weights button state
   updateResetWeightsButton();
 }
@@ -12557,13 +12580,13 @@ function renderTagsetTabs() {
 // Initialize tab click handlers
 function initTagsetTabHandlers() {
   const tabs = document.querySelectorAll('.tagset-tab');
-  
+
   tabs.forEach(tab => {
     // Clone to remove old handlers
     const newTab = tab.cloneNode(true);
     tab.parentNode.replaceChild(newTab, tab);
   });
-  
+
   // Re-attach handlers
   document.querySelectorAll('.tagset-tab').forEach(tab => {
     tab.addEventListener('click', (e) => {
@@ -12575,13 +12598,13 @@ function initTagsetTabHandlers() {
       }
     });
   });
-  
+
   // Reset weights button
   const resetBtn = document.getElementById('reset-weights-btn');
   if (resetBtn) {
     const newResetBtn = resetBtn.cloneNode(true);
     resetBtn.parentNode.replaceChild(newResetBtn, resetBtn);
-    
+
     document.getElementById('reset-weights-btn').addEventListener('click', (e) => {
       e.preventDefault();
       if (confirm('Reset all tag weights to 1? This will give all tags equal selection probability.')) {
@@ -12609,30 +12632,30 @@ function renderTagsetModeToggle() {
 function renderTagsetTagPool() {
   const container = document.getElementById('tagset-tag-pool');
   if (!container) return;
-  
+
   const allTagNames = allTags || [];
   const tagCounts = getImageCountPerTag();
-  
+
   // Filter out tags already in include or exclude
-  const availableTags = allTagNames.filter(tag => 
+  const availableTags = allTagNames.filter(tag =>
     !tagsetModalIncludeTags.includes(tag) && !tagsetModalExcludeTags.includes(tag)
   ).sort();
-  
+
   if (allTagNames.length === 0) {
     container.innerHTML = '<span class="no-tags-message">No tags available</span>';
     return;
   }
-  
+
   if (availableTags.length === 0) {
     container.innerHTML = '<span class="no-tags-message">All tags assigned</span>';
     return;
   }
-  
+
   container.innerHTML = availableTags.map(tag => {
     const count = tagCounts[tag] || 0;
     return `<span class="tag-pill" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)} <span class="tag-count">(${count})</span></span>`;
   }).join('');
-  
+
   // Add click handlers
   container.querySelectorAll('.tag-pill').forEach(pill => {
     pill.addEventListener('click', () => {
@@ -12655,20 +12678,20 @@ function renderTagsetSelectedTags(type) {
   const containerId = type === 'include' ? 'tagset-include-tags' : 'tagset-exclude-tags';
   const container = document.getElementById(containerId);
   if (!container) return;
-  
+
   const tags = type === 'include' ? tagsetModalIncludeTags : tagsetModalExcludeTags;
   const tagCounts = getImageCountPerTag();
-  
+
   if (tags.length === 0) {
     const hint = type === 'include' ? 'Click tags above to include' : 'Click tags above to exclude';
     container.innerHTML = `<span class="empty-hint">${hint}</span>`;
     return;
   }
-  
+
   // For include tags, check if any weights are non-default and calculate percentages
   const hasCustomWeights = type === 'include' && tags.some(t => (tagsetModalTagWeights[t] || 1) !== 1);
   const percentages = type === 'include' ? calculateTagPercentages(tags, tagsetModalTagWeights) : {};
-  
+
   container.innerHTML = tags.map(tag => {
     const count = tagCounts[tag] || 0;
     const percentStr = hasCustomWeights ? `<span class="tag-percent">${percentages[tag] || 0}%</span> ` : '';
@@ -12677,7 +12700,7 @@ function renderTagsetSelectedTags(type) {
       <span class="tag-remove">×</span>
     </span>`;
   }).join('');
-  
+
   // Add click handlers to remove
   container.querySelectorAll('.tag-pill').forEach(pill => {
     pill.addEventListener('click', () => {
@@ -12701,10 +12724,10 @@ function renderTagsetSelectedTags(type) {
 // Calculate percentages for tags based on weights
 function calculateTagPercentages(tags, weights) {
   if (!tags || tags.length === 0) return {};
-  
+
   const total = tags.reduce((sum, tag) => sum + (weights[tag] || 1), 0);
   if (total === 0) return {};
-  
+
   const percentages = {};
   tags.forEach(tag => {
     const weight = weights[tag] || 1;
@@ -12716,18 +12739,18 @@ function calculateTagPercentages(tags, weights) {
 // Generate a pie chart showing tag weight distribution
 function generateWeightsPieChart(tags, percentages) {
   if (!tags || tags.length === 0) return '';
-  
+
   // Color palette for pie segments
   const colors = [
     '#4a90d9', '#5cb85c', '#f0ad4e', '#d9534f', '#9b59b6',
     '#1abc9c', '#e74c3c', '#3498db', '#2ecc71', '#f39c12',
     '#8e44ad', '#16a085', '#c0392b', '#2980b9', '#27ae60'
   ];
-  
+
   // Build conic-gradient stops
   let cumulative = 0;
   const gradientStops = [];
-  
+
   tags.forEach((tag, i) => {
     const pct = parseFloat(percentages[tag]) || 0;
     const color = colors[i % colors.length];
@@ -12735,9 +12758,9 @@ function generateWeightsPieChart(tags, percentages) {
     cumulative += pct;
     gradientStops.push(`${color} ${cumulative}%`);
   });
-  
+
   const gradient = gradientStops.join(', ');
-  
+
   // Build legend items
   const legendItems = tags.map((tag, i) => {
     const color = colors[i % colors.length];
@@ -12747,7 +12770,7 @@ function generateWeightsPieChart(tags, percentages) {
       <span class="pie-legend-text">${escapeHtml(tag)} <span class="pie-legend-pct">${pct}%</span></span>
     </div>`;
   }).join('');
-  
+
   return `
     <div class="weights-pie-container">
       <div class="weights-pie-chart" style="background: conic-gradient(${gradient})"></div>
@@ -12761,13 +12784,13 @@ function updateWeightsPieChart(tags, percentages) {
   const pieChart = document.querySelector('.weights-pie-chart');
   const legend = document.querySelector('.weights-pie-legend');
   if (!pieChart || !legend) return;
-  
+
   const colors = [
     '#4a90d9', '#5cb85c', '#f0ad4e', '#d9534f', '#9b59b6',
     '#1abc9c', '#e74c3c', '#3498db', '#2ecc71', '#f39c12',
     '#8e44ad', '#16a085', '#c0392b', '#2980b9', '#27ae60'
   ];
-  
+
   // Update gradient
   let cumulative = 0;
   const gradientStops = [];
@@ -12779,7 +12802,7 @@ function updateWeightsPieChart(tags, percentages) {
     gradientStops.push(`${color} ${cumulative}%`);
   });
   pieChart.style.background = `conic-gradient(${gradientStops.join(', ')})`;
-  
+
   // Update legend percentages
   const legendItems = legend.querySelectorAll('.pie-legend-item');
   legendItems.forEach((item, i) => {
@@ -12828,14 +12851,14 @@ function weightToSliderPosition(weight) {
 function renderTagsetWeightsTab() {
   const container = document.getElementById('tagset-weights-container');
   if (!container) return;
-  
+
   const tags = tagsetModalIncludeTags;
-  
+
   if (tags.length === 0) {
     container.innerHTML = '<p class="empty-hint">Add include tags on the Tags tab first</p>';
     return;
   }
-  
+
   // Build weighting type toggle
   const weightingToggle = `
     <div class="weighting-type-toggle">
@@ -12850,9 +12873,9 @@ function renderTagsetWeightsTab() {
       </div>
     </div>
   `;
-  
+
   let content = '';
-  
+
   if (tagsetModalWeightingType === 'image') {
     // Image-weighted mode: show tables of included/excluded images
     content = renderImageWeightedContent();
@@ -12860,9 +12883,9 @@ function renderTagsetWeightsTab() {
     // Tag-weighted mode: show sliders
     content = renderTagWeightedContent();
   }
-  
+
   container.innerHTML = weightingToggle + content;
-  
+
   // Add weighting type toggle handlers
   container.querySelectorAll('.weighting-type-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -12872,7 +12895,7 @@ function renderTagsetWeightsTab() {
       updateResetWeightsButton();
     });
   });
-  
+
   // Add slider handlers if in tag-weighted mode
   if (tagsetModalWeightingType === 'tag') {
     initTagWeightSliders(container);
@@ -12883,21 +12906,21 @@ function renderTagsetWeightsTab() {
 function renderImageWeightedContent() {
   const includeTags = tagsetModalIncludeTags;
   const excludeTags = tagsetModalExcludeTags;
-  
+
   // Get all images from global allImages (populated on app load)
   const images = allImages || {};
-  
+
   // Categorize images
   const includedImages = [];
   const excludedImages = [];
-  
+
   for (const [filename, imageData] of Object.entries(images)) {
     const imageTags = imageData.tags || [];
-    
+
     // Check if image has any include tag
     const hasIncludeTag = includeTags.some(t => imageTags.includes(t));
     if (!hasIncludeTag) continue; // Not relevant to this tagset
-    
+
     // Check if image has any exclude tag
     const excludeTag = excludeTags.find(t => imageTags.includes(t));
     if (excludeTag) {
@@ -12906,10 +12929,10 @@ function renderImageWeightedContent() {
       includedImages.push({ filename, tags: imageTags });
     }
   }
-  
+
   // Calculate percentage (all equal)
   const pct = includedImages.length > 0 ? (100 / includedImages.length).toFixed(1) : '0.0';
-  
+
   // Build included table
   let includedHtml = `
     <div class="image-weighted-section included-section">
@@ -12928,7 +12951,7 @@ function renderImageWeightedContent() {
           </thead>
           <tbody>
   `;
-  
+
   if (includedImages.length === 0) {
     includedHtml += `<tr><td colspan="3" class="empty-row">No matching images</td></tr>`;
   } else {
@@ -12942,14 +12965,14 @@ function renderImageWeightedContent() {
       `;
     }
   }
-  
+
   includedHtml += `
           </tbody>
         </table>
       </div>
     </div>
   `;
-  
+
   // Build excluded table (always show, even if empty)
   let excludedHtml = `
     <div class="image-weighted-section excluded-section">
@@ -12967,7 +12990,7 @@ function renderImageWeightedContent() {
           </thead>
           <tbody>
   `;
-  
+
   if (excludedImages.length === 0) {
     excludedHtml += `<tr><td colspan="2" class="empty-row">No excluded images</td></tr>`;
   } else {
@@ -12980,14 +13003,14 @@ function renderImageWeightedContent() {
       `;
     }
   }
-  
+
   excludedHtml += `
           </tbody>
         </table>
       </div>
     </div>
   `;
-  
+
   return includedHtml + excludedHtml;
 }
 
@@ -12996,16 +13019,16 @@ function renderTagWeightedContent() {
   const tags = tagsetModalIncludeTags;
   const tagCounts = getImageCountPerTag();
   const percentages = calculateTagPercentages(tags, tagsetModalTagWeights);
-  
+
   // Generate pie chart
   const pieChart = generateWeightsPieChart(tags, percentages);
-  
+
   const sliders = tags.map(tag => {
     const weight = tagsetModalTagWeights[tag] || 1;
     const sliderPos = weightToSliderPosition(weight);
     const count = tagCounts[tag] || 0;
     const pct = percentages[tag] || 0;
-    
+
     return `
       <div class="weight-slider-row" data-tag="${escapeHtml(tag)}">
         <div class="weight-slider-header">
@@ -13015,11 +13038,11 @@ function renderTagWeightedContent() {
           <span class="weight-slider-percent">${pct}%</span>
           <div class="weight-slider-track-wrapper">
             <span class="weight-slider-value">${formatWeightDisplay(weight)}</span>
-            <input type="range" 
-                   class="weight-slider" 
-                   min="0" 
-                   max="18" 
-                   step="1" 
+            <input type="range"
+                   class="weight-slider"
+                   min="0"
+                   max="18"
+                   step="1"
                    value="${sliderPos}"
                    data-tag="${escapeHtml(tag)}" />
             <div class="weight-slider-ticks">
@@ -13032,7 +13055,7 @@ function renderTagWeightedContent() {
       </div>
     `;
   }).join('');
-  
+
   return pieChart + '<div class="weights-sliders">' + sliders + '</div>';
 }
 
@@ -13043,31 +13066,31 @@ function initTagWeightSliders(container) {
       const tag = slider.dataset.tag;
       const position = parseInt(e.target.value);
       const weight = sliderPositionToWeight(position);
-      
+
       // Update weight state
       if (weight === 1) {
         delete tagsetModalTagWeights[tag]; // Remove default weights
       } else {
         tagsetModalTagWeights[tag] = weight;
       }
-      
+
       // Update display
       const row = slider.closest('.weight-slider-row');
       row.querySelector('.weight-slider-value').textContent = formatWeightDisplay(weight);
-      
+
       // Recalculate all percentages
       const newPercentages = calculateTagPercentages(tagsetModalIncludeTags, tagsetModalTagWeights);
       container.querySelectorAll('.weight-slider-row').forEach(r => {
         const t = r.dataset.tag;
         r.querySelector('.weight-slider-percent').textContent = `${newPercentages[t] || 0}%`;
       });
-      
+
       // Update pie chart
       updateWeightsPieChart(tagsetModalIncludeTags, newPercentages);
-      
+
       // Update reset button state
       updateResetWeightsButton();
-      
+
       // Also update Tags tab include pills if visible
       renderTagsetSelectedTags('include');
     });
@@ -13095,13 +13118,13 @@ function updateResetWeightsButton() {
 // Initialize mode toggle handlers (only once per modal open)
 function initTagsetModalHandlers() {
   const buttons = document.querySelectorAll('.tagset-mode-toggle .mode-btn');
-  
+
   // Remove old handlers and add new ones
   buttons.forEach(btn => {
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
   });
-  
+
   // Re-select after cloning
   document.querySelectorAll('.tagset-mode-toggle .mode-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -13132,26 +13155,26 @@ function sanitizeTagsetName(name) {
 // Supports renaming via original_name parameter
 async function saveTagset(e) {
   if (e) e.preventDefault();
-  
+
   const form = document.getElementById('tagset-form');
   const nameInput = document.getElementById('tagset-name-input');
-  
+
   // Sanitize the name
   const name = sanitizeTagsetName(nameInput.value);
   nameInput.value = name; // Update input to show sanitized value
-  
+
   const originalName = form.dataset.originalName || '';
-  
+
   if (!name) {
     alert('Tagset name is required');
     return;
   }
-  
+
   // Check for case-insensitive duplicate tagset names
   const existingTagsets = window.tvData?.global_tagsets || {};
   const nameLower = name.toLowerCase();
   const originalNameLower = originalName.toLowerCase();
-  
+
   for (const existingName of Object.keys(existingTagsets)) {
     // Skip if this is the same tagset we're editing (case-insensitive match)
     if (originalName && existingName.toLowerCase() === originalNameLower) {
@@ -13163,17 +13186,17 @@ async function saveTagset(e) {
       return;
     }
   }
-  
+
   // Get selected tags from modal state
   const tags = tagsetModalIncludeTags;
   const excludeTags = tagsetModalExcludeTags;
-  
+
   // Validate at least one include tag
   if (tags.length === 0) {
     alert('At least one include tag is required');
     return;
   }
-  
+
   try {
     const payload = {
       name: name,
@@ -13181,25 +13204,25 @@ async function saveTagset(e) {
       exclude_tags: excludeTags,
       weighting_type: tagsetModalWeightingType
     };
-    
+
     // Include original_name for rename support
     if (originalName && originalName !== name) {
       payload.original_name = originalName;
     }
-    
+
     // Include tag_weights if any non-default weights exist (only relevant for tag-weighted mode)
     if (Object.keys(tagsetModalTagWeights).length > 0) {
       payload.tag_weights = tagsetModalTagWeights;
     }
-    
+
     const response = await fetch(`${API_BASE}/ha/tagsets/upsert`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    
+
     const result = await response.json();
-    
+
     if (result.success) {
       closeTagsetModal();
       // Refresh TV data and re-render
@@ -13227,14 +13250,14 @@ async function deleteTagset(tagsetName) {
         tvs: allTVs
       })
     });
-    
+
     const result = await response.json();
     console.log('Delete tagset response:', response.status, result);
-    
+
     if (result.success) {
       // Update local state immediately
       delete allGlobalTagsets[tagsetName];
-      
+
       // Re-render the tagsets UI
       populateTagsetDropdowns();
       renderTVAssignments();
@@ -13261,9 +13284,9 @@ async function selectTagset(deviceId, tagsetName, skipRender = false) {
         name: tagsetName
       })
     });
-    
+
     const result = await response.json();
-    
+
     if (result.success) {
       // Refresh TV data but optionally skip re-render
       await loadTVs();
@@ -13287,9 +13310,9 @@ function formatExpiryTime(minutes) {
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const isTomorrow = expiry.toDateString() === tomorrow.toDateString();
-  
+
   const timeStr = expiry.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  
+
   if (isToday) {
     return `(${timeStr})`;
   } else if (isTomorrow) {
@@ -13308,25 +13331,25 @@ function openOverrideModal(deviceId) {
   const customDurationInput = document.getElementById('override-custom-duration');
   const deviceIdInput = document.getElementById('override-device-id');
   const tvNameSpan = document.getElementById('override-tv-name');
-  
+
   // Find the TV
   const tv = allTVs.find(t => t.device_id === deviceId);
   if (!tv) {
     alert('TV not found');
     return;
   }
-  
+
   // Store device ID
   deviceIdInput.value = deviceId;
   tvNameSpan.textContent = tv.name;
-  
+
   // Populate tagset options from GLOBAL tagsets - exclude currently selected tagset
   const tagsetNames = Object.keys(allGlobalTagsets || {})
     .filter(name => name !== tv.selected_tagset);
-  
-  select.innerHTML = '<option value="">-- Select Tagset --</option>' + 
+
+  select.innerHTML = '<option value="">-- Select Tagset --</option>' +
     tagsetNames.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
-  
+
   // Update duration options with expiry times
   const durations = [
     { value: '30', label: '30 minutes' },
@@ -13338,15 +13361,15 @@ function openOverrideModal(deviceId) {
     { value: '1440', label: '24 hours' },
     { value: 'custom', label: 'Custom...' }
   ];
-  
+
   durationSelect.innerHTML = durations.map(d => {
     const expiryStr = d.value !== 'custom' ? ' ' + formatExpiryTime(parseInt(d.value)) : '';
     return `<option value="${d.value}"${d.value === '240' ? ' selected' : ''}>${d.label}${expiryStr}</option>`;
   }).join('');
-  
+
   customDurationInput.classList.add('hidden');
   customDurationInput.value = '';
-  
+
   modal.classList.add('active');
 }
 
@@ -13359,20 +13382,20 @@ function closeOverrideModal() {
 // Apply override
 async function applyOverride(e) {
   if (e) e.preventDefault();
-  
+
   const deviceIdInput = document.getElementById('override-device-id');
   const select = document.getElementById('override-tagset-select');
   const durationSelect = document.getElementById('override-duration-select');
   const customDurationInput = document.getElementById('override-custom-duration');
-  
+
   const deviceId = deviceIdInput.value;
   const tagsetName = select.value;
-  
+
   if (!tagsetName) {
     alert('Please select a tagset');
     return;
   }
-  
+
   // Get duration in minutes
   let durationMinutes;
   if (durationSelect.value === 'custom') {
@@ -13380,12 +13403,12 @@ async function applyOverride(e) {
   } else {
     durationMinutes = parseInt(durationSelect.value) || 0;
   }
-  
+
   if (durationMinutes <= 0) {
     alert('Please select a duration');
     return;
   }
-  
+
   try {
     const response = await fetch(`${API_BASE}/ha/tagsets/override`, {
       method: 'POST',
@@ -13396,9 +13419,9 @@ async function applyOverride(e) {
         duration_minutes: durationMinutes
       })
     });
-    
+
     const result = await response.json();
-    
+
     if (result.success) {
       closeOverrideModal();
       // Refresh TV data and re-render
@@ -13423,9 +13446,9 @@ async function clearOverride(deviceId) {
         device_id: deviceId
       })
     });
-    
+
     const result = await response.json();
-    
+
     if (result.success) {
       // Refresh TV data and re-render
       await loadTVs();
@@ -13446,14 +13469,14 @@ function initTagsetModalListeners() {
   if (tagsetModal) {
     // Close button
     document.getElementById('tagset-modal-close')?.addEventListener('click', closeTagsetModal);
-    
+
     // Cancel button
     document.getElementById('cancel-tagset-btn')?.addEventListener('click', closeTagsetModal);
-    
+
     // Form submission
     const tagsetForm = document.getElementById('tagset-form');
     tagsetForm?.addEventListener('submit', saveTagset);
-    
+
     // Delete button - GLOBAL tagsets, no device_id needed
     document.getElementById('delete-tagset-btn')?.addEventListener('click', async () => {
       const form = document.getElementById('tagset-form');
@@ -13463,7 +13486,7 @@ function initTagsetModalListeners() {
         closeTagsetModal();
       }
     });
-    
+
     // Close on background click
     tagsetModal.addEventListener('click', (e) => {
       if (e.target === tagsetModal) {
@@ -13471,20 +13494,20 @@ function initTagsetModalListeners() {
       }
     });
   }
-  
+
   // Override modal
   const overrideModal = document.getElementById('override-modal');
   if (overrideModal) {
     // Close button
     document.getElementById('override-modal-close')?.addEventListener('click', closeOverrideModal);
-    
+
     // Cancel button
     document.getElementById('cancel-override-btn')?.addEventListener('click', closeOverrideModal);
-    
+
     // Form submission
     const overrideForm = document.getElementById('override-form');
     overrideForm?.addEventListener('submit', applyOverride);
-    
+
     // Duration select change handler for custom option
     const durationSelect = document.getElementById('override-duration-select');
     const customDurationInput = document.getElementById('override-custom-duration');
@@ -13496,7 +13519,7 @@ function initTagsetModalListeners() {
         customDurationInput?.classList.add('hidden');
       }
     });
-    
+
     // Close on background click
     overrideModal.addEventListener('click', (e) => {
       if (e.target === overrideModal) {
@@ -13504,8 +13527,7 @@ function initTagsetModalListeners() {
       }
     });
   }
-  
+
   // "New Tagset" button in Tags tab - needs to open modal with no device pre-selected
   // We'll handle this differently - through the individual TV sections
 }
-
