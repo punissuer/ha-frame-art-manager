@@ -8,13 +8,13 @@
 
 ## About
 
-Billy's Art Manager home built web interface for managing artwork destined for Samsung Frame displays. Upload images, organize with tags, and sync your library with Git LFS for backup and multi-device management. TV assignment and scheduling now live in the Home Assistant integration—this add-on focuses on curating the artwork library itself.
+Home built web interface for managing artwork destined for Samsung Frame displays. Upload images, organize with tags, and sync your library with Git LFS for backup and multi-device management. TV assignment and scheduling now live in the Home Assistant integration—this add-on focuses on curating the artwork library itself.
 
 ## Installation
 
 1. Add this repository to your Home Assistant add-on store:
    - Go to **Supervisor** → **Add-on Store** → **⋮ (menu)** → **Repositories**
-   - Add: `https://github.com/billyfw/ha-frame-art-manager`
+   - Add: `https://github.com/punissuer/ha-frame-art-manager`
 
 2. Find **Frame Art Manager** in the add-on store and click **Install**
 

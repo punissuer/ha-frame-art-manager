@@ -64,8 +64,8 @@ To enable Git synchronization of your frame art library:
 
 ## Support
 
-- **GitHub**: https://github.com/billyfw/ha-frame-art-manager
-- **Issues**: https://github.com/billyfw/ha-frame-art-manager/issues
+- **GitHub**: https://github.com/punissuer/ha-frame-art-manager
+- **Issues**: https://github.com/punissuer/ha-frame-art-manager/issues
 - **Full Documentation**: See the GitHub repository for detailed usage instructions
 
 ## Version

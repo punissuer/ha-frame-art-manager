@@ -60,21 +60,21 @@ When provisioning a new Home Assistant box, set up the artwork repository before
 3. **Clone the Frame Art library via SSH** so images and metadata stay under version control:
 
 	```bash
-	git clone git@github.com:billyfw/frame_art.git frame_art
+	git clone git@github.com:punissuer/frame_art.git frame_art
 	cd frame_art
 	```
 
 	> 💡 Ensure the Home Assistant host has an SSH key registered with GitHub (`/root/.ssh/id_rsa`). The default add-on startup flow expects SSH access and will not prompt for HTTPS credentials.
 
-4. **Normalize Git LFS to the expected SSH endpoints.** Older clones (or the default `git lfs install` flow) sometimes record HTTPS URLs or append `/info/lfs` directly in your Git config. Inside Home Assistant the add-on can’t complete HTTPS auth, and Git LFS will refuse to download objects if it sees `billyfw/frame_art.git/info/lfs` as the repository. Running the commands below rewrites everything to the SSH base URL that our scripts expect and strips out any lingering HTTPS credentials. The add-on also performs this check each time it starts, so you’re mostly just confirming things look right before first launch:
+4. **Normalize Git LFS to the expected SSH endpoints.** Older clones (or the default `git lfs install` flow) sometimes record HTTPS URLs or append `/info/lfs` directly in your Git config. Inside Home Assistant the add-on can’t complete HTTPS auth, and Git LFS will refuse to download objects if it sees `punissuer/frame_art.git/info/lfs` as the repository. Running the commands below rewrites everything to the SSH base URL that our scripts expect and strips out any lingering HTTPS credentials. The add-on also performs this check each time it starts, so you’re mostly just confirming things look right before first launch:
 
 	```bash
-	git remote get-url origin                                 # git@github.com:billyfw/frame_art.git
-	git config remote.origin.lfsurl ssh://git@github.com/billyfw/frame_art
-	git config lfs.url ssh://git@github.com/billyfw/frame_art
-	git config lfs.ssh.endpoint git@github.com:billyfw/frame_art.git
-	git config --unset lfs.https://github.com/billyfw/frame_art/info/lfs.access 2>/dev/null || true
-	git config --unset lfs.https://github.com/billyfw/frame_art.git/info/lfs.access 2>/dev/null || true
+	git remote get-url origin                                 # git@github.com:punissuer/frame_art.git
+	git config remote.origin.lfsurl ssh://git@github.com/punissuer/frame_art
+	git config lfs.url ssh://git@github.com/punissuer/frame_art
+	git config lfs.ssh.endpoint git@github.com:punissuer/frame_art.git
+	git config --unset lfs.https://github.com/punissuer/frame_art/info/lfs.access 2>/dev/null || true
+	git config --unset lfs.https://github.com/punissuer/frame_art.git/info/lfs.access 2>/dev/null || true
 	```
 
 5. **Install the add-on** and set the configuration option `frame_art_path: /config/www/frame_art`.
@@ -167,8 +167,8 @@ See [STATUS.md](docs/STATUS.md) for detailed progress.
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/billyfw/ha-frame-art-manager/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/billyfw/ha-frame-art-manager/discussions)
+- **Issues**: [GitHub Issues](https://github.com/punissuer/ha-frame-art-manager/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/punissuer/ha-frame-art-manager/discussions)
 - **Documentation**: See the `docs/` folder
 
 ## Contributing
@@ -185,13 +185,13 @@ MIT License - See [LICENSE](LICENSE) file for details.
 
 ## Credits
 
-Created by Billy
+Created by punissuer
 
 Special thanks to the Home Assistant community.
 
 ---
 
-[releases-shield]: https://img.shields.io/github/release/billyfw/ha-frame-art-manager.svg
-[releases]: https://github.com/billyfw/ha-frame-art-manager/releases
-[license-shield]: https://img.shields.io/github/license/billyfw/ha-frame-art-manager.svg
+[releases-shield]: https://img.shields.io/github/release/punissuer/ha-frame-art-manager.svg
+[releases]: https://github.com/punissuer/ha-frame-art-manager/releases
+[license-shield]: https://img.shields.io/github/license/punissuer/ha-frame-art-manager.svg
 [maintenance-shield]: https://img.shields.io/maintenance/yes/2025.svg

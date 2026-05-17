@@ -189,6 +189,6 @@ After installation:
 
 ## Support
 
-- **Issues**: https://github.com/billyfw/ha-frame-art-manager/issues
+- **Issues**: https://github.com/punissuer/ha-frame-art-manager/issues
 - **Documentation**: See the add-on's **Documentation** tab
 - **Logs**: Check the add-on **Log** tab for diagnostics

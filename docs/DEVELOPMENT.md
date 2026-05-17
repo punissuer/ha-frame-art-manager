@@ -51,9 +51,9 @@ npm test           # Run all tests
 
 Frame Art Manager relies on Git LFS over SSH. Both the Home Assistant add-on (`run.sh`) and the server-side helper (`git_helper.js`) normalize any SSH remote into the same base configuration:
 
-- `remote.origin.lfsurl` → `ssh://git@github.com/billyfw/frame_art`
-- `lfs.url` → `ssh://git@github.com/billyfw/frame_art`
-- `lfs.ssh.endpoint` → `git@github.com:billyfw/frame_art.git`
+- `remote.origin.lfsurl` → `ssh://git@github.com/punissuer/frame_art`
+- `lfs.url` → `ssh://git@github.com/punissuer/frame_art`
+- `lfs.ssh.endpoint` → `git@github.com:punissuer/frame_art.git`
 - Legacy HTTPS access tokens (`lfs.https://github.com/.../info/lfs.access`) are removed automatically
 
 This matches a working macOS setup and ensures the add-on never falls back to HTTPS (which requires credentials the container cannot provide).
@@ -61,12 +61,12 @@ This matches a working macOS setup and ensures the add-on never falls back to HT
 To verify the configuration on either environment:
 
 ```bash
-git remote get-url origin                               # should be git@github.com:billyfw/frame_art.git
-git config --get remote.origin.lfsurl                   # ssh://git@github.com/billyfw/frame_art
-git config --get lfs.url                                # ssh://git@github.com/billyfw/frame_art
-git config --get lfs.ssh.endpoint                       # git@github.com:billyfw/frame_art.git
-git config --get lfs.https://github.com/billyfw/frame_art/info/lfs.access || echo "(cleared)"
-git config --get lfs.https://github.com/billyfw/frame_art.git/info/lfs.access || echo "(cleared)"
+git remote get-url origin                               # should be git@github.com:punissuer/frame_art.git
+git config --get remote.origin.lfsurl                   # ssh://git@github.com/punissuer/frame_art
+git config --get lfs.url                                # ssh://git@github.com/punissuer/frame_art
+git config --get lfs.ssh.endpoint                       # git@github.com:punissuer/frame_art.git
+git config --get lfs.https://github.com/punissuer/frame_art/info/lfs.access || echo "(cleared)"
+git config --get lfs.https://github.com/punissuer/frame_art.git/info/lfs.access || echo "(cleared)"
 ```
 
 If the add-on picked up an older configuration, simply restart it—`run.sh` now rewrites the values on boot before the Node server starts.
