@@ -7,7 +7,7 @@ build_from:
 labels:
   org.opencontainers.image.title: "Frame Art Manager"
   org.opencontainers.image.description: "Manage your Samsung Frame TV artwork library"
-  org.opencontainers.image.source: "https://github.com/billyfw/ha-frame-art-manager"
+  org.opencontainers.image.source: "https://github.com/punissuer/ha-frame-art-manager"
   org.opencontainers.image.licenses: "MIT"
 args:
   TEMPIO_VERSION: "2021.09.0"
