@@ -27,7 +27,7 @@ ports_description:
   8099/tcp: Web interface
 ingress: true
 ingress_port: 8099
-ingress_stream: false
+ingress_stream: true
 panel_icon: mdi:image-frame
 panel_title: Frame Art Manager
 webui: http://[HOST]:[PORT:8099]
