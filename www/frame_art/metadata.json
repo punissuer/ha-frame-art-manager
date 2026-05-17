@@ -1,0 +1,19 @@
+{
+  "version": "1.0",
+  "images": {
+    "2026-03-08-110505-447f61d3.jpg": {
+      "matte": "none",
+      "filter": "None",
+      "tags": [],
+      "dimensions": {
+        "width": 6240,
+        "height": 4160
+      },
+      "aspectRatio": 1.5,
+      "added": "2026-05-17T00:44:58.937Z",
+      "sourceHash": "1ffc0ffc07f003c03ffe1ffc07f80000ffff7e7f0e00000002000e7e1e7f23ff",
+      "updated": "2026-05-17T00:44:58.938Z"
+    }
+  },
+  "tags": []
+}
