@@ -4,18 +4,14 @@ FROM $BUILD_FROM
 # Set shell
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Install Node.js, git, and git-lfs
+# Install Node.js dependencies
 RUN apk add --no-cache \
     nodejs \
     npm \
-    git \
-    git-lfs \
-    openssh-client \
     python3 \
     make \
     g++ \
-    jq \
-    && git lfs install
+    jq
 
 # Set working directory
 WORKDIR /app
