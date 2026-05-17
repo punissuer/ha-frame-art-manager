@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const crypto = require('crypto');
 const heicConvert = require('heic-convert');
+const sharp = require('sharp');
 const MetadataHelper = require('../metadata_helper');
 const ImageEditService = require('../image_edit_service');
 const {
@@ -256,6 +257,37 @@ function extensionToContentType(ext) {
   }
 }
 
+const TV_MAX_BYTES = 10 * 1024 * 1024; // Samsung Frame TV API limit
+
+async function compressForTV(filePath) {
+  const stats = await fs.stat(filePath);
+  if (stats.size <= TV_MAX_BYTES) return;
+
+  const ext = path.extname(filePath).toLowerCase();
+  const isJpeg = ext === '.jpg' || ext === '.jpeg';
+
+  console.log(`[Upload] Compressing ${(stats.size / 1024 / 1024).toFixed(2)}MB file for TV compatibility`);
+
+  // Always cap at 4K — Samsung Frame is 3840×2160
+  let pipeline = sharp(filePath).resize(3840, 2160, { fit: 'inside', withoutEnlargement: true });
+
+  for (let quality = 85; quality >= 40; quality -= 10) {
+    const buf = await pipeline.clone().jpeg({ quality, mozjpeg: true }).toBuffer();
+    if (buf.length <= TV_MAX_BYTES) {
+      const outPath = isJpeg ? filePath : filePath.replace(/\.[^.]+$/, '.jpg');
+      await fs.writeFile(outPath, buf);
+      console.log(`[Upload] Compressed to ${(buf.length / 1024 / 1024).toFixed(2)}MB at quality ${quality}`);
+      return outPath;
+    }
+  }
+  // Absolute last resort at quality 30
+  const buf = await pipeline.clone().jpeg({ quality: 30, mozjpeg: true }).toBuffer();
+  const outPath = isJpeg ? filePath : filePath.replace(/\.[^.]+$/, '.jpg');
+  await fs.writeFile(outPath, buf);
+  console.log(`[Upload] Compressed to ${(buf.length / 1024 / 1024).toFixed(2)}MB at quality 30`);
+  return outPath;
+}
+
 async function convertHeicBufferToJpeg(buffer, quality = 0.95) {
   return heicConvert({
     buffer,
@@ -409,6 +441,19 @@ router.post('/upload', upload.single('image'), async (req, res) => {
     req.uploadContext = renameResult.context;
     req.file.filename = finalFilename;
     req.file.path = finalFilePath;
+
+    // Compress large images so Samsung Frame TV can receive them (<10 MB)
+    try {
+      const compressed = await compressForTV(finalFilePath);
+      if (compressed && compressed !== finalFilePath) {
+        finalFilename = path.basename(compressed);
+        finalFilePath = compressed;
+        req.file.filename = finalFilename;
+        req.file.path = finalFilePath;
+      }
+    } catch (compressError) {
+      console.warn('[Upload] Compression failed, keeping original:', compressError.message);
+    }
 
     try {
       const stats = await fs.stat(finalFilePath);
